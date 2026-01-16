@@ -383,8 +383,37 @@ namespace Genesis
                 // Blend ridge noise for mountain ranges
                 if (m_TerrainSettings.useRidgeNoise)
                 {
-                    float ridgeSampleX = sampleX * m_TerrainSettings.ridgeScale;
-                    float ridgeSampleY = sampleY * m_TerrainSettings.ridgeScale;
+                    float ridgeCoordX = sampleX;
+                    float ridgeCoordY = sampleY;
+
+                    if (m_TerrainSettings.useWarp && m_TerrainSettings.warpLevels > 0 && m_TerrainSettings.warpStrength > 0.0f)
+                    {
+                        float wx = ridgeCoordX;
+                        float wy = ridgeCoordY;
+
+                        for (int level = 0; level < m_TerrainSettings.warpLevels; level++)
+                        {
+                            float offsetX = 5.2f + level * 17.1f;
+                            float offsetY = 1.3f + level * 31.7f;
+                            float offsetX2 = 9.7f + level * 23.5f;
+                            float offsetY2 = 2.8f + level * 13.9f;
+
+                            float levelWarpStrength = m_TerrainSettings.warpStrength / (1.0f + level * 0.5f);
+                            float levelWarpScale = m_TerrainSettings.warpScale * (1.0f + level * 0.3f);
+
+                            float warpOffsetX = noise.FBM(wx * levelWarpScale + offsetX, wy * levelWarpScale + offsetY, 2, 0.5f, 2.0f) * levelWarpStrength;
+                            float warpOffsetY = noise.FBM(wx * levelWarpScale + offsetX2, wy * levelWarpScale + offsetY2, 2, 0.5f, 2.0f) * levelWarpStrength;
+
+                            wx += warpOffsetX;
+                            wy += warpOffsetY;
+                        }
+
+                        ridgeCoordX = wx;
+                        ridgeCoordY = wy;
+                    }
+
+                    float ridgeSampleX = ridgeCoordX * m_TerrainSettings.ridgeScale;
+                    float ridgeSampleY = ridgeCoordY * m_TerrainSettings.ridgeScale;
                     float ridgeNoise = noise.RidgeNoise(ridgeSampleX, ridgeSampleY,
                                                         m_TerrainSettings.octaves,
                                                         m_TerrainSettings.persistence,

@@ -1,5 +1,6 @@
 #include "genesis/procedural/TerrainGenerator.h"
 #include <algorithm>
+#include <cmath>
 
 namespace Genesis
 {
@@ -27,18 +28,61 @@ namespace Genesis
         float noiseZ = z * m_Settings.noiseScale;
 
         // Get base terrain noise
-        float baseNoise = m_Noise.FBM(noiseX, noiseZ,
-                                      m_Settings.octaves,
-                                      m_Settings.persistence,
-                                      m_Settings.lacunarity);
+        float baseNoise;
+        if (m_Settings.useWarp && m_Settings.warpLevels > 0)
+        {
+            baseNoise = m_Noise.MultiWarpedFBM(noiseX, noiseZ,
+                                               m_Settings.octaves,
+                                               m_Settings.persistence,
+                                               m_Settings.lacunarity,
+                                               m_Settings.warpStrength,
+                                               m_Settings.warpScale,
+                                               m_Settings.warpLevels);
+        }
+        else
+        {
+            baseNoise = m_Noise.FBM(noiseX, noiseZ,
+                                    m_Settings.octaves,
+                                    m_Settings.persistence,
+                                    m_Settings.lacunarity);
+        }
 
         float height = baseNoise;
 
         if (m_Settings.useRidgeNoise)
         {
             // Get ridge noise for sharp mountain crests
-            float ridgeNoiseX = noiseX * m_Settings.ridgeScale;
-            float ridgeNoiseZ = noiseZ * m_Settings.ridgeScale;
+            float ridgeCoordX = noiseX;
+            float ridgeCoordZ = noiseZ;
+
+            if (m_Settings.useWarp && m_Settings.warpLevels > 0 && m_Settings.warpStrength > 0.0f)
+            {
+                float wx = ridgeCoordX;
+                float wz = ridgeCoordZ;
+
+                for (int level = 0; level < m_Settings.warpLevels; level++)
+                {
+                    float offsetX = 5.2f + level * 17.1f;
+                    float offsetZ = 1.3f + level * 31.7f;
+                    float offsetX2 = 9.7f + level * 23.5f;
+                    float offsetZ2 = 2.8f + level * 13.9f;
+
+                    float levelWarpStrength = m_Settings.warpStrength / (1.0f + level * 0.5f);
+                    float levelWarpScale = m_Settings.warpScale * (1.0f + level * 0.3f);
+
+                    float warpOffsetX = m_Noise.FBM(wx * levelWarpScale + offsetX, wz * levelWarpScale + offsetZ, 2, 0.5f, 2.0f) * levelWarpStrength;
+                    float warpOffsetZ = m_Noise.FBM(wx * levelWarpScale + offsetX2, wz * levelWarpScale + offsetZ2, 2, 0.5f, 2.0f) * levelWarpStrength;
+
+                    wx += warpOffsetX;
+                    wz += warpOffsetZ;
+                }
+
+                ridgeCoordX = wx;
+                ridgeCoordZ = wz;
+            }
+
+            float ridgeNoiseX = ridgeCoordX * m_Settings.ridgeScale;
+            float ridgeNoiseZ = ridgeCoordZ * m_Settings.ridgeScale;
             float ridgeNoise = m_Noise.RidgeNoise(ridgeNoiseX, ridgeNoiseZ,
                                                   m_Settings.octaves,
                                                   m_Settings.persistence,

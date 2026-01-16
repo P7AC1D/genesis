@@ -108,8 +108,37 @@ namespace Genesis
                 // Blend ridge noise for mountain ranges
                 if (settings.useRidgeNoise)
                 {
-                    float ridgeNoiseX = noiseX * settings.ridgeScale;
-                    float ridgeNoiseZ = noiseZ * settings.ridgeScale;
+                    float ridgeCoordX = noiseX;
+                    float ridgeCoordZ = noiseZ;
+
+                    if (settings.useWarp && settings.warpLevels > 0 && settings.warpStrength > 0.0f)
+                    {
+                        float wx = ridgeCoordX;
+                        float wz = ridgeCoordZ;
+
+                        for (int level = 0; level < settings.warpLevels; level++)
+                        {
+                            float offsetX = 5.2f + level * 17.1f;
+                            float offsetZ = 1.3f + level * 31.7f;
+                            float offsetX2 = 9.7f + level * 23.5f;
+                            float offsetZ2 = 2.8f + level * 13.9f;
+
+                            float levelWarpStrength = settings.warpStrength / (1.0f + level * 0.5f);
+                            float levelWarpScale = settings.warpScale * (1.0f + level * 0.3f);
+
+                            float warpOffsetX = noise.FBM(wx * levelWarpScale + offsetX, wz * levelWarpScale + offsetZ, 2, 0.5f, 2.0f) * levelWarpStrength;
+                            float warpOffsetZ = noise.FBM(wx * levelWarpScale + offsetX2, wz * levelWarpScale + offsetZ2, 2, 0.5f, 2.0f) * levelWarpStrength;
+
+                            wx += warpOffsetX;
+                            wz += warpOffsetZ;
+                        }
+
+                        ridgeCoordX = wx;
+                        ridgeCoordZ = wz;
+                    }
+
+                    float ridgeNoiseX = ridgeCoordX * settings.ridgeScale;
+                    float ridgeNoiseZ = ridgeCoordZ * settings.ridgeScale;
                     float ridgeNoise = noise.RidgeNoise(ridgeNoiseX, ridgeNoiseZ,
                                                         settings.octaves,
                                                         settings.persistence,
