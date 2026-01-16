@@ -15,6 +15,7 @@ namespace Genesis {
     };
 
     class VulkanDevice;
+    class BiomeGenerator;
 
     class Chunk {
     public:
@@ -22,7 +23,8 @@ namespace Genesis {
         ~Chunk();
 
         // Generate terrain for this chunk
-        void Generate(const TerrainSettings& baseSettings, uint32_t worldSeed, float seaLevel = 0.0f);
+        void Generate(const TerrainSettings& baseSettings, uint32_t worldSeed, 
+                      float seaLevel = 0.0f, BiomeGenerator* biomeGen = nullptr);
         
         // Upload mesh to GPU
         void Upload(VulkanDevice& device);
@@ -55,8 +57,8 @@ namespace Genesis {
 
     private:
         // Internal generation helpers
-        std::shared_ptr<Mesh> GenerateWithWorldOffset(float offsetX, float offsetZ, uint32_t worldSeed);
-        void GenerateObjects(uint32_t worldSeed, float seaLevel);
+        std::shared_ptr<Mesh> GenerateWithWorldOffset(float offsetX, float offsetZ, uint32_t worldSeed, BiomeGenerator* biomeGen);
+        void GenerateObjects(uint32_t worldSeed, float seaLevel, BiomeGenerator* biomeGen);
         void GenerateWater(float seaLevel);
         float GetHeightAtLocal(float localX, float localZ) const;
 

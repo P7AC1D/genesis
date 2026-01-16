@@ -177,14 +177,19 @@ namespace Genesis {
         m_TreeMesh = Mesh::CreateLowPolyTree(device);
         m_RockMesh = Mesh::CreateLowPolyRock(device);
 
-        // Initialize chunk-based world with water
+        // Initialize chunk-based world with biomes and water
         WorldSettings worldSettings;
         worldSettings.chunkSize = 32;
         worldSettings.cellSize = 1.0f;
         worldSettings.viewDistance = 3;
         worldSettings.seed = 42;
-        worldSettings.seaLevel = 2.0f;   // Water at height 2.0
+        worldSettings.seaLevel = 2.0f;
         worldSettings.waterEnabled = true;
+        
+        // Enable biome system
+        worldSettings.biomesEnabled = true;
+        worldSettings.temperatureScale = 0.003f;  // Larger biomes
+        worldSettings.moistureScale = 0.004f;
         
         worldSettings.terrainSettings.heightScale = 8.0f;
         worldSettings.terrainSettings.noiseScale = 0.04f;
@@ -202,7 +207,7 @@ namespace Genesis {
         // Setup lighting
         SetupLighting();
 
-        GEN_INFO("Scene setup complete with chunk-based world ({}x{} chunks visible)", 
+        GEN_INFO("Scene setup complete with biome-based world ({}x{} chunks visible)", 
             worldSettings.viewDistance * 2 + 1, worldSettings.viewDistance * 2 + 1);
     }
 

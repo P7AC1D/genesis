@@ -2,6 +2,7 @@
 
 #include "genesis/world/Chunk.h"
 #include "genesis/procedural/TerrainGenerator.h"
+#include "genesis/procedural/Biome.h"
 #include <glm/glm.hpp>
 #include <unordered_map>
 #include <memory>
@@ -24,6 +25,11 @@ namespace Genesis {
         // Water settings
         float seaLevel = 2.0f;        // Height of water surface
         bool waterEnabled = true;
+        
+        // Biome settings
+        bool biomesEnabled = true;
+        float temperatureScale = 0.002f;  // Biome transition scale
+        float moistureScale = 0.003f;
         
         // Terrain settings (applied to all chunks)
         TerrainSettings terrainSettings;
@@ -85,6 +91,7 @@ namespace Genesis {
     private:
         VulkanDevice* m_Device = nullptr;
         WorldSettings m_Settings;
+        BiomeGenerator m_BiomeGenerator;
 
         // Currently loaded chunks (key = chunk coordinate)
         std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, ChunkCoordHash> m_LoadedChunks;

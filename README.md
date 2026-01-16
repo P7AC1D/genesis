@@ -271,7 +271,7 @@ Chunk::Generate() → Noise sampling → Mesh generation → GPU upload
 - [x] Point lights and fog
 
 ### Next Steps
-- [ ] **Water Rendering**: Flat water plane with transparency/reflection
+- [x] **Water Rendering**: Flat water plane with transparency/reflection
 - [ ] **Biome System**: Different terrain parameters based on world position
 - [ ] **ImGui Integration**: Debug overlay with FPS, stats, and controls
 - [ ] **Object Variation**: Random scale/rotation for trees and rocks

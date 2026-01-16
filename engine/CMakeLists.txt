@@ -23,6 +23,7 @@ set(ENGINE_SOURCES
     src/procedural/Noise.cpp
     src/procedural/TerrainGenerator.cpp
     src/procedural/Water.cpp
+    src/procedural/Biome.cpp
     
     src/world/Chunk.cpp
     src/world/ChunkManager.cpp

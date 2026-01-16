@@ -31,6 +31,14 @@ namespace Genesis
             m_Settings.terrainSettings.flatShading = true;
             m_Settings.terrainSettings.useHeightColors = true;
         }
+        
+        // Initialize biome generator
+        if (m_Settings.biomesEnabled) {
+            m_BiomeGenerator.Initialize(m_Settings.seed);
+            m_BiomeGenerator.SetTemperatureScale(m_Settings.temperatureScale);
+            m_BiomeGenerator.SetMoistureScale(m_Settings.moistureScale);
+            GEN_INFO("Biome system enabled");
+        }
 
         GEN_INFO("ChunkManager initialized (chunk size: {}, view distance: {})",
                  m_Settings.chunkSize, m_Settings.viewDistance);
@@ -146,7 +154,10 @@ namespace Genesis
 
         auto chunk = std::make_unique<Chunk>(chunkX, chunkZ, m_Settings.chunkSize, m_Settings.cellSize);
         float seaLevel = m_Settings.waterEnabled ? m_Settings.seaLevel : -1000.0f;
-        chunk->Generate(m_Settings.terrainSettings, m_Settings.seed, seaLevel);
+        
+        // Pass biome generator if enabled
+        BiomeGenerator* biomeGen = m_Settings.biomesEnabled ? &m_BiomeGenerator : nullptr;
+        chunk->Generate(m_Settings.terrainSettings, m_Settings.seed, seaLevel, biomeGen);
         chunk->Upload(*m_Device);
 
         m_LoadedChunks[coord] = std::move(chunk);
