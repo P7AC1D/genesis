@@ -76,8 +76,14 @@ namespace Genesis {
 
     Application::~Application() {
         OnShutdown();
-        m_Renderer->Shutdown();
+        
+        // Destroy layers first (they may hold GPU resources)
         m_LayerStack.reset();
+        
+        // Then shutdown renderer
+        m_Renderer->Shutdown();
+        m_Renderer.reset();
+        
         m_Window.reset();
         Log::Shutdown();
         s_Instance = nullptr;

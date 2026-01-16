@@ -1,4 +1,5 @@
 #include "Sandbox.h"
+#include <genesis/renderer/VulkanDevice.h>
 
 namespace Genesis {
 
@@ -21,11 +22,26 @@ namespace Genesis {
     void Sandbox::OnDetach() {
         GEN_INFO("Sandbox layer detached");
 
-        // Cleanup test meshes
-        if (m_CubeMesh) m_CubeMesh->Shutdown();
-        if (m_PlaneMesh) m_PlaneMesh->Shutdown();
-        if (m_TreeMesh) m_TreeMesh->Shutdown();
-        if (m_RockMesh) m_RockMesh->Shutdown();
+        // Wait for GPU to finish before cleanup
+        Application::Get().GetRenderer().GetDevice().WaitIdle();
+
+        // Cleanup test meshes before device is destroyed
+        if (m_RockMesh) {
+            m_RockMesh->Shutdown();
+            m_RockMesh.reset();
+        }
+        if (m_TreeMesh) {
+            m_TreeMesh->Shutdown();
+            m_TreeMesh.reset();
+        }
+        if (m_PlaneMesh) {
+            m_PlaneMesh->Shutdown();
+            m_PlaneMesh.reset();
+        }
+        if (m_CubeMesh) {
+            m_CubeMesh->Shutdown();
+            m_CubeMesh.reset();
+        }
     }
 
     void Sandbox::OnUpdate(float deltaTime) {

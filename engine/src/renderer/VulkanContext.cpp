@@ -125,6 +125,11 @@ namespace Genesis {
         uint32_t layerCount;
         vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
 
+        if (layerCount == 0) {
+            GEN_WARN("No Vulkan validation layers available");
+            return false;
+        }
+
         std::vector<VkLayerProperties> availableLayers(layerCount);
         vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 
@@ -137,6 +142,7 @@ namespace Genesis {
                 }
             }
             if (!found) {
+                GEN_WARN("Validation layer {} not found, disabling validation", layerName);
                 return false;
             }
         }

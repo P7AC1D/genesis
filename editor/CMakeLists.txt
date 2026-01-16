@@ -12,7 +12,7 @@ add_executable(GenesisEditor ${EDITOR_SOURCES})
 
 target_include_directories(GenesisEditor
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/editor
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 

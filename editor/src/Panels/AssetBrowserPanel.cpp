@@ -3,7 +3,7 @@
 namespace Genesis {
 
     AssetBrowserPanel::AssetBrowserPanel()
-        : m_BaseDirectory("assets"), m_CurrentDirectory(m_BaseDirectory) {
+        : m_BaseDirectory("assets"), m_CurrentDirectory("assets") {
     }
 
     void AssetBrowserPanel::OnImGuiRender() {
