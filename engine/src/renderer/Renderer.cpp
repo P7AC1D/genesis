@@ -13,12 +13,14 @@
 #include <cmath>
 #include <stdexcept>
 
-namespace Genesis {
+namespace Genesis
+{
 
     Renderer::Renderer() = default;
     Renderer::~Renderer() = default;
 
-    void Renderer::Init(Window& window) {
+    void Renderer::Init(Window &window)
+    {
         GEN_INFO("Initializing Vulkan renderer...");
         m_Window = &window;
 
@@ -44,53 +46,73 @@ namespace Genesis {
         GEN_INFO("Vulkan renderer initialized!");
     }
 
-    void Renderer::Shutdown() {
+    void Renderer::Shutdown()
+    {
         m_Device->WaitIdle();
 
         VkDevice device = m_Device->GetDevice();
 
         // Cleanup uniform buffers
-        for (auto& buffer : m_UniformBuffers) {
-            if (buffer) buffer->Shutdown();
+        for (auto &buffer : m_UniformBuffers)
+        {
+            if (buffer)
+                buffer->Shutdown();
         }
         m_UniformBuffers.clear();
 
         // Cleanup descriptor resources
-        if (m_DescriptorPool != VK_NULL_HANDLE) {
+        if (m_DescriptorPool != VK_NULL_HANDLE)
+        {
             vkDestroyDescriptorPool(device, m_DescriptorPool, nullptr);
             m_DescriptorPool = VK_NULL_HANDLE;
         }
 
-        if (m_DescriptorSetLayout != VK_NULL_HANDLE) {
+        if (m_DescriptorSetLayout != VK_NULL_HANDLE)
+        {
             vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayout, nullptr);
             m_DescriptorSetLayout = VK_NULL_HANDLE;
         }
 
-        if (m_PipelineLayout != VK_NULL_HANDLE) {
+        if (m_PipelineLayout != VK_NULL_HANDLE)
+        {
             vkDestroyPipelineLayout(device, m_PipelineLayout, nullptr);
             m_PipelineLayout = VK_NULL_HANDLE;
         }
 
         // Cleanup pipeline
-        if (m_WaterPipeline) m_WaterPipeline->Shutdown();
-        if (m_Pipeline) m_Pipeline->Shutdown();
+        if (m_WaterPipeline)
+            m_WaterPipeline->Shutdown();
+        if (m_Pipeline)
+            m_Pipeline->Shutdown();
 
         // Cleanup sync objects
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
             vkDestroySemaphore(device, m_ImageAvailableSemaphores[i], nullptr);
-            vkDestroySemaphore(device, m_RenderFinishedSemaphores[i], nullptr);
             vkDestroyFence(device, m_InFlightFences[i], nullptr);
         }
 
+        for (VkSemaphore semaphore : m_RenderFinishedSemaphoresPerImage)
+        {
+            if (semaphore != VK_NULL_HANDLE)
+            {
+                vkDestroySemaphore(device, semaphore, nullptr);
+            }
+        }
+
         // Cleanup swapchain and device
-        if (m_Swapchain) m_Swapchain->Shutdown();
-        if (m_Device) m_Device->Shutdown();
-        if (m_Context) m_Context->Shutdown();
+        if (m_Swapchain)
+            m_Swapchain->Shutdown();
+        if (m_Device)
+            m_Device->Shutdown();
+        if (m_Context)
+            m_Context->Shutdown();
 
         GEN_INFO("Vulkan renderer shutdown complete.");
     }
 
-    void Renderer::CreateCommandBuffers() {
+    void Renderer::CreateCommandBuffers()
+    {
         m_CommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
         VkCommandBufferAllocateInfo allocInfo{};
@@ -99,16 +121,19 @@ namespace Genesis {
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = static_cast<uint32_t>(m_CommandBuffers.size());
 
-        if (vkAllocateCommandBuffers(m_Device->GetDevice(), &allocInfo, m_CommandBuffers.data()) != VK_SUCCESS) {
+        if (vkAllocateCommandBuffers(m_Device->GetDevice(), &allocInfo, m_CommandBuffers.data()) != VK_SUCCESS)
+        {
             throw std::runtime_error("Failed to allocate command buffers!");
         }
     }
 
-    void Renderer::CreateSyncObjects() {
+    void Renderer::CreateSyncObjects()
+    {
         m_ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        m_RenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         m_InFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
         m_ImagesInFlight.resize(m_Swapchain->GetImageCount(), VK_NULL_HANDLE);
+
+        m_RenderFinishedSemaphoresPerImage.resize(m_Swapchain->GetImageCount());
 
         VkSemaphoreCreateInfo semaphoreInfo{};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -117,16 +142,26 @@ namespace Genesis {
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
             if (vkCreateSemaphore(m_Device->GetDevice(), &semaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(m_Device->GetDevice(), &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateFence(m_Device->GetDevice(), &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS) {
+                vkCreateFence(m_Device->GetDevice(), &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
+            {
                 throw std::runtime_error("Failed to create synchronization objects!");
+            }
+        }
+
+        for (size_t i = 0; i < m_RenderFinishedSemaphoresPerImage.size(); i++)
+        {
+            if (vkCreateSemaphore(m_Device->GetDevice(), &semaphoreInfo, nullptr, &m_RenderFinishedSemaphoresPerImage[i]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("Failed to create render-finished semaphores!");
             }
         }
     }
 
-    void Renderer::CreateDescriptorSetLayout() {
+    void Renderer::CreateDescriptorSetLayout()
+    {
         VkDescriptorSetLayoutBinding uboLayoutBinding{};
         uboLayoutBinding.binding = 0;
         uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -139,12 +174,14 @@ namespace Genesis {
         layoutInfo.bindingCount = 1;
         layoutInfo.pBindings = &uboLayoutBinding;
 
-        if (vkCreateDescriptorSetLayout(m_Device->GetDevice(), &layoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS) {
+        if (vkCreateDescriptorSetLayout(m_Device->GetDevice(), &layoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
+        {
             throw std::runtime_error("Failed to create descriptor set layout!");
         }
     }
 
-    void Renderer::CreatePipelineLayout() {
+    void Renderer::CreatePipelineLayout()
+    {
         VkPushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
         pushConstantRange.offset = 0;
@@ -157,12 +194,14 @@ namespace Genesis {
         pipelineLayoutInfo.pushConstantRangeCount = 1;
         pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
-        if (vkCreatePipelineLayout(m_Device->GetDevice(), &pipelineLayoutInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS) {
+        if (vkCreatePipelineLayout(m_Device->GetDevice(), &pipelineLayoutInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS)
+        {
             throw std::runtime_error("Failed to create pipeline layout!");
         }
     }
 
-    void Renderer::CreatePipeline() {
+    void Renderer::CreatePipeline()
+    {
         PipelineConfig config{};
         VulkanPipeline::DefaultPipelineConfig(config);
         config.RenderPass = m_Swapchain->GetRenderPass();
@@ -172,7 +211,8 @@ namespace Genesis {
         m_Pipeline->Init(*m_Device, "assets/shaders/lowpoly.vert.spv", "assets/shaders/lowpoly.frag.spv", config);
     }
 
-    void Renderer::CreateWaterPipeline() {
+    void Renderer::CreateWaterPipeline()
+    {
         PipelineConfig config{};
         VulkanPipeline::TransparentPipelineConfig(config);
         config.RenderPass = m_Swapchain->GetRenderPass();
@@ -182,19 +222,22 @@ namespace Genesis {
         m_WaterPipeline->Init(*m_Device, "assets/shaders/water.vert.spv", "assets/shaders/water.frag.spv", config);
     }
 
-    void Renderer::CreateUniformBuffers() {
+    void Renderer::CreateUniformBuffers()
+    {
         VkDeviceSize bufferSize = sizeof(GlobalUBO);
         m_UniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
             m_UniformBuffers[i] = std::make_unique<VulkanBuffer>();
             m_UniformBuffers[i]->Init(*m_Device, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
             m_UniformBuffers[i]->Map();
         }
     }
 
-    void Renderer::CreateDescriptorPool() {
+    void Renderer::CreateDescriptorPool()
+    {
         VkDescriptorPoolSize poolSize{};
         poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
@@ -205,12 +248,14 @@ namespace Genesis {
         poolInfo.pPoolSizes = &poolSize;
         poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
-        if (vkCreateDescriptorPool(m_Device->GetDevice(), &poolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS) {
+        if (vkCreateDescriptorPool(m_Device->GetDevice(), &poolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
+        {
             throw std::runtime_error("Failed to create descriptor pool!");
         }
     }
 
-    void Renderer::CreateDescriptorSets() {
+    void Renderer::CreateDescriptorSets()
+    {
         std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, m_DescriptorSetLayout);
 
         VkDescriptorSetAllocateInfo allocInfo{};
@@ -220,11 +265,13 @@ namespace Genesis {
         allocInfo.pSetLayouts = layouts.data();
 
         m_DescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-        if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, m_DescriptorSets.data()) != VK_SUCCESS) {
+        if (vkAllocateDescriptorSets(m_Device->GetDevice(), &allocInfo, m_DescriptorSets.data()) != VK_SUCCESS)
+        {
             throw std::runtime_error("Failed to allocate descriptor sets!");
         }
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
             VkDescriptorBufferInfo bufferInfo = m_UniformBuffers[i]->GetDescriptorInfo(sizeof(GlobalUBO));
 
             VkWriteDescriptorSet descriptorWrite{};
@@ -240,7 +287,8 @@ namespace Genesis {
         }
     }
 
-    bool Renderer::BeginFrame() {
+    bool Renderer::BeginFrame()
+    {
         VkDevice device = m_Device->GetDevice();
 
         // Wait for the frame we're about to render to be done
@@ -250,17 +298,21 @@ namespace Genesis {
         uint32_t imageIndex;
         VkResult result = m_Swapchain->AcquireNextImage(m_ImageAvailableSemaphores[m_CurrentFrameIndex], &imageIndex);
 
-        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        if (result == VK_ERROR_OUT_OF_DATE_KHR)
+        {
             RecreateSwapchain();
             return false;
-        } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        }
+        else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+        {
             throw std::runtime_error("Failed to acquire swap chain image!");
         }
 
         m_CurrentImageIndex = imageIndex;
 
         // Check if a previous frame is using this image (i.e. there is its fence to wait on)
-        if (m_ImagesInFlight[m_CurrentImageIndex] != VK_NULL_HANDLE) {
+        if (m_ImagesInFlight[m_CurrentImageIndex] != VK_NULL_HANDLE)
+        {
             vkWaitForFences(device, 1, &m_ImagesInFlight[m_CurrentImageIndex], VK_TRUE, UINT64_MAX);
         }
         // Mark the image as now being in use by this frame
@@ -275,7 +327,8 @@ namespace Genesis {
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-        if (vkBeginCommandBuffer(cmd, &beginInfo) != VK_SUCCESS) {
+        if (vkBeginCommandBuffer(cmd, &beginInfo) != VK_SUCCESS)
+        {
             throw std::runtime_error("Failed to begin recording command buffer!");
         }
 
@@ -288,7 +341,7 @@ namespace Genesis {
         renderPassInfo.renderArea.extent = m_Swapchain->GetExtent();
 
         std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = {{0.1f, 0.1f, 0.15f, 1.0f}};  // Dark blue-gray background
+        clearValues[0].color = {{0.1f, 0.1f, 0.15f, 1.0f}}; // Dark blue-gray background
         clearValues[1].depthStencil = {1.0f, 0};
 
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -316,15 +369,18 @@ namespace Genesis {
         return true;
     }
 
-    void Renderer::EndFrame() {
-        if (!m_FrameStarted) return;
+    void Renderer::EndFrame()
+    {
+        if (!m_FrameStarted)
+            return;
 
         VkCommandBuffer cmd = m_CommandBuffers[m_CurrentFrameIndex];
 
         // End render pass and command buffer
         vkCmdEndRenderPass(cmd);
 
-        if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
+        if (vkEndCommandBuffer(cmd) != VK_SUCCESS)
+        {
             throw std::runtime_error("Failed to record command buffer!");
         }
 
@@ -340,21 +396,25 @@ namespace Genesis {
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &cmd;
 
-        VkSemaphore signalSemaphores[] = {m_RenderFinishedSemaphores[m_CurrentFrameIndex]};
+        VkSemaphore signalSemaphores[] = {m_RenderFinishedSemaphoresPerImage[m_CurrentImageIndex]};
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
-        if (vkQueueSubmit(m_Device->GetGraphicsQueue(), 1, &submitInfo, m_InFlightFences[m_CurrentFrameIndex]) != VK_SUCCESS) {
+        if (vkQueueSubmit(m_Device->GetGraphicsQueue(), 1, &submitInfo, m_InFlightFences[m_CurrentFrameIndex]) != VK_SUCCESS)
+        {
             throw std::runtime_error("Failed to submit draw command buffer!");
         }
 
         // Present
-        VkResult result = m_Swapchain->Present(m_Device->GetPresentQueue(), m_RenderFinishedSemaphores[m_CurrentFrameIndex], m_CurrentImageIndex);
+        VkResult result = m_Swapchain->Present(m_Device->GetPresentQueue(), m_RenderFinishedSemaphoresPerImage[m_CurrentImageIndex], m_CurrentImageIndex);
 
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || m_SwapchainNeedsRecreation) {
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || m_SwapchainNeedsRecreation)
+        {
             m_SwapchainNeedsRecreation = false;
             RecreateSwapchain();
-        } else if (result != VK_SUCCESS) {
+        }
+        else if (result != VK_SUCCESS)
+        {
             throw std::runtime_error("Failed to present swap chain image!");
         }
 
@@ -362,28 +422,30 @@ namespace Genesis {
         m_FrameStarted = false;
     }
 
-    void Renderer::BeginScene(const Camera& camera) {
+    void Renderer::BeginScene(const Camera &camera)
+    {
         // Update uniform buffer with camera matrices
         m_GlobalUBO.ViewMatrix = camera.GetViewMatrix();
         m_GlobalUBO.ProjectionMatrix = camera.GetProjectionMatrix();
         // Pack time into w component for water shader
         m_GlobalUBO.CameraPosition = glm::vec4(camera.GetPosition(), m_Time);
-        
+
         // Update lighting data from LightManager
-        const auto& dirLight = m_LightManager.GetDirectionalLight();
+        const auto &dirLight = m_LightManager.GetDirectionalLight();
         m_GlobalUBO.SunDirection = glm::vec4(glm::normalize(dirLight.Direction), 0.0f);
         m_GlobalUBO.SunColor = glm::vec4(dirLight.Color, dirLight.Intensity);
-        
-        const auto& settings = m_LightManager.GetSettings();
+
+        const auto &settings = m_LightManager.GetSettings();
         m_GlobalUBO.AmbientColor = glm::vec4(settings.AmbientColor, settings.AmbientIntensity);
         m_GlobalUBO.FogColorAndDensity = glm::vec4(settings.FogColor, settings.FogDensity);
-        
+
         // Update point lights
-        const auto& pointLights = m_LightManager.GetPointLights();
+        const auto &pointLights = m_LightManager.GetPointLights();
         m_GlobalUBO.NumPointLights.x = static_cast<int>(pointLights.size());
-        
-        for (size_t i = 0; i < pointLights.size() && i < MAX_POINT_LIGHTS; i++) {
-            const auto& light = pointLights[i];
+
+        for (size_t i = 0; i < pointLights.size() && i < MAX_POINT_LIGHTS; i++)
+        {
+            const auto &light = pointLights[i];
             m_GlobalUBO.PointLights[i].PositionAndIntensity = glm::vec4(light.Position, light.Intensity);
             // Calculate radius from attenuation (where light contribution becomes negligible)
             float radius = 16.0f / std::sqrt(light.Quadratic);
@@ -399,12 +461,15 @@ namespace Genesis {
                                 &m_DescriptorSets[m_CurrentFrameIndex], 0, nullptr);
     }
 
-    void Renderer::EndScene() {
+    void Renderer::EndScene()
+    {
         // Flush any batched draw calls (for future optimization)
     }
 
-    void Renderer::Draw(const Mesh& mesh, const glm::mat4& transform) {
-        if (!m_FrameStarted) return;
+    void Renderer::Draw(const Mesh &mesh, const glm::mat4 &transform)
+    {
+        if (!m_FrameStarted)
+            return;
 
         VkCommandBuffer cmd = m_CommandBuffers[m_CurrentFrameIndex];
 
@@ -423,11 +488,13 @@ namespace Genesis {
         m_Stats.TriangleCount += mesh.GetIndexCount() / 3;
     }
 
-    void Renderer::DrawWater(const Mesh& mesh, const glm::mat4& transform) {
-        if (!m_FrameStarted || !m_WaterSettings.enabled) return;
+    void Renderer::DrawWater(const Mesh &mesh, const glm::mat4 &transform)
+    {
+        if (!m_FrameStarted || !m_WaterSettings.enabled)
+            return;
 
         VkCommandBuffer cmd = m_CommandBuffers[m_CurrentFrameIndex];
-        
+
         // Switch to water pipeline
         m_WaterPipeline->Bind(cmd);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1,
@@ -446,26 +513,30 @@ namespace Genesis {
 
         m_Stats.DrawCalls++;
         m_Stats.TriangleCount += mesh.GetIndexCount() / 3;
-        
+
         // Switch back to opaque pipeline for any subsequent draws
         m_Pipeline->Bind(cmd);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1,
                                 &m_DescriptorSets[m_CurrentFrameIndex], 0, nullptr);
     }
 
-    void Renderer::RenderScene(Scene& scene) {
+    void Renderer::RenderScene(Scene &scene)
+    {
         // Iterate through scene entities and render (future implementation)
     }
 
-    void Renderer::OnWindowResize(uint32_t width, uint32_t height) {
+    void Renderer::OnWindowResize(uint32_t width, uint32_t height)
+    {
         m_SwapchainNeedsRecreation = true;
     }
 
-    void Renderer::RecreateSwapchain() {
+    void Renderer::RecreateSwapchain()
+    {
         uint32_t width = m_Window->GetWidth();
         uint32_t height = m_Window->GetHeight();
 
-        while (width == 0 || height == 0) {
+        while (width == 0 || height == 0)
+        {
             // Window is minimized, wait
             m_Window->PollEvents();
             width = m_Window->GetWidth();
@@ -478,9 +549,32 @@ namespace Genesis {
         // Reset image tracking
         m_ImagesInFlight.clear();
         m_ImagesInFlight.resize(m_Swapchain->GetImageCount(), VK_NULL_HANDLE);
+
+        // Recreate per-image render-finished semaphores if swapchain image count changed
+        VkDevice device = m_Device->GetDevice();
+        for (VkSemaphore semaphore : m_RenderFinishedSemaphoresPerImage)
+        {
+            if (semaphore != VK_NULL_HANDLE)
+            {
+                vkDestroySemaphore(device, semaphore, nullptr);
+            }
+        }
+        m_RenderFinishedSemaphoresPerImage.clear();
+        m_RenderFinishedSemaphoresPerImage.resize(m_Swapchain->GetImageCount());
+
+        VkSemaphoreCreateInfo semaphoreInfo{};
+        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        for (size_t i = 0; i < m_RenderFinishedSemaphoresPerImage.size(); i++)
+        {
+            if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &m_RenderFinishedSemaphoresPerImage[i]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("Failed to recreate render-finished semaphores!");
+            }
+        }
     }
 
-    void Renderer::ResetStats() {
+    void Renderer::ResetStats()
+    {
         m_Stats.DrawCalls = 0;
         m_Stats.TriangleCount = 0;
     }

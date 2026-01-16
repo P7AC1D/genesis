@@ -7,7 +7,8 @@
 #include <memory>
 #include <vector>
 
-namespace Genesis {
+namespace Genesis
+{
 
     class VulkanContext;
     class VulkanDevice;
@@ -18,82 +19,87 @@ namespace Genesis {
     class Mesh;
     class Scene;
 
-    struct RenderStats {
+    struct RenderStats
+    {
         uint32_t DrawCalls = 0;
         uint32_t TriangleCount = 0;
         float FrameTime = 0.0f;
     };
 
     // Push constant for model matrix
-    struct PushConstantData {
+    struct PushConstantData
+    {
         glm::mat4 ModelMatrix{1.0f};
         glm::mat4 NormalMatrix{1.0f};
     };
 
     // Point light data for shader (must match shader layout)
-    struct PointLightData {
-        glm::vec4 PositionAndIntensity{0.0f};  // xyz = position, w = intensity
-        glm::vec4 ColorAndRadius{1.0f};         // xyz = color, w = radius
+    struct PointLightData
+    {
+        glm::vec4 PositionAndIntensity{0.0f}; // xyz = position, w = intensity
+        glm::vec4 ColorAndRadius{1.0f};       // xyz = color, w = radius
     };
 
     // Uniform buffer for global scene data
-    struct GlobalUBO {
+    struct GlobalUBO
+    {
         glm::mat4 ViewMatrix{1.0f};
         glm::mat4 ProjectionMatrix{1.0f};
         glm::vec4 CameraPosition{0.0f};
-        
+
         // Directional light (sun)
         glm::vec4 SunDirection{-0.2f, -1.0f, -0.3f, 0.0f};
-        glm::vec4 SunColor{1.0f, 0.95f, 0.9f, 1.0f};  // xyz = color, w = intensity
-        
+        glm::vec4 SunColor{1.0f, 0.95f, 0.9f, 1.0f}; // xyz = color, w = intensity
+
         // Ambient
-        glm::vec4 AmbientColor{0.15f, 0.15f, 0.2f, 1.0f};  // xyz = color, w = intensity
-        
+        glm::vec4 AmbientColor{0.15f, 0.15f, 0.2f, 1.0f}; // xyz = color, w = intensity
+
         // Point lights
         PointLightData PointLights[MAX_POINT_LIGHTS];
-        glm::ivec4 NumPointLights{0};  // x = count, yzw = padding
-        
+        glm::ivec4 NumPointLights{0}; // x = count, yzw = padding
+
         // Fog
-        glm::vec4 FogColorAndDensity{0.7f, 0.8f, 0.9f, 0.0f};  // xyz = color, w = density
+        glm::vec4 FogColorAndDensity{0.7f, 0.8f, 0.9f, 0.0f}; // xyz = color, w = density
     };
 
-    class Renderer {
+    class Renderer
+    {
     public:
         static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
         Renderer();
         ~Renderer();
 
-        void Init(class Window& window);
+        void Init(class Window &window);
         void Shutdown();
 
         bool BeginFrame();
         void EndFrame();
 
-        void BeginScene(const Camera& camera);
+        void BeginScene(const Camera &camera);
         void EndScene();
 
-        void Draw(const Mesh& mesh, const glm::mat4& transform);
-        void DrawWater(const Mesh& mesh, const glm::mat4& transform);
-        void RenderScene(Scene& scene);
+        void Draw(const Mesh &mesh, const glm::mat4 &transform);
+        void DrawWater(const Mesh &mesh, const glm::mat4 &transform);
+        void RenderScene(Scene &scene);
 
         void OnWindowResize(uint32_t width, uint32_t height);
 
-        VulkanContext& GetContext() { return *m_Context; }
-        VulkanDevice& GetDevice() { return *m_Device; }
+        VulkanContext &GetContext() { return *m_Context; }
+        VulkanDevice &GetDevice() { return *m_Device; }
         VkCommandBuffer GetCurrentCommandBuffer() const { return m_CommandBuffers[m_CurrentFrameIndex]; }
-        
+
         // Lighting
-        LightManager& GetLightManager() { return m_LightManager; }
-        const LightManager& GetLightManager() const { return m_LightManager; }
-        
+        LightManager &GetLightManager() { return m_LightManager; }
+        const LightManager &GetLightManager() const { return m_LightManager; }
+
         // Water
-        WaterSettings& GetWaterSettings() { return m_WaterSettings; }
-        const WaterSettings& GetWaterSettings() const { return m_WaterSettings; }
+        WaterSettings &GetWaterSettings() { return m_WaterSettings; }
+        const WaterSettings &GetWaterSettings() const { return m_WaterSettings; }
         void SetTime(float time) { m_Time = time; }
         float GetTime() const { return m_Time; }
 
-        const RenderStats& GetStats() const { return m_Stats; }
+        const RenderStats &GetStats() const { return m_Stats; }
         void ResetStats();
 
         bool IsFrameInProgress() const { return m_FrameStarted; }
@@ -123,9 +129,11 @@ namespace Genesis {
 
         // Synchronization
         std::vector<VkSemaphore> m_ImageAvailableSemaphores;
-        std::vector<VkSemaphore> m_RenderFinishedSemaphores;
+        // Render-finished semaphores are indexed by swapchain image to avoid reusing
+        // a semaphore that is still in use by presentation.
+        std::vector<VkSemaphore> m_RenderFinishedSemaphoresPerImage;
         std::vector<VkFence> m_InFlightFences;
-        std::vector<VkFence> m_ImagesInFlight;  // Track which fence is associated with each swapchain image
+        std::vector<VkFence> m_ImagesInFlight; // Track which fence is associated with each swapchain image
 
         // Descriptor resources
         VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
@@ -141,15 +149,15 @@ namespace Genesis {
         bool m_SwapchainNeedsRecreation = false;
 
         // Window reference
-        class Window* m_Window = nullptr;
+        class Window *m_Window = nullptr;
 
         // Current scene data
         GlobalUBO m_GlobalUBO;
         float m_Time = 0.0f;
-        
+
         // Lighting
         LightManager m_LightManager;
-        
+
         // Water
         WaterSettings m_WaterSettings;
 
@@ -157,4 +165,3 @@ namespace Genesis {
     };
 
 }
-
