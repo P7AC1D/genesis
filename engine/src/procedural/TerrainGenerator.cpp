@@ -147,8 +147,8 @@ namespace Genesis {
                     glm::vec3 p01(x0, h01, z1);
                     glm::vec3 p11(x1, h11, z1);
                     
-                    // Triangle 1: p00, p10, p01
-                    glm::vec3 normal1 = glm::normalize(glm::cross(p10 - p00, p01 - p00));
+                    // Triangle 1: p00, p01, p10 (CCW winding for upward normal)
+                    glm::vec3 normal1 = glm::normalize(glm::cross(p01 - p00, p10 - p00));
                     float avgH1 = (h00 + h10 + h01) / 3.0f;
                     float normH1 = (avgH1 - minHeight) / heightRange;
                     glm::vec3 color1 = m_Settings.useHeightColors ? 
@@ -156,14 +156,14 @@ namespace Genesis {
                     
                     uint32_t baseIdx = static_cast<uint32_t>(vertices.size());
                     vertices.push_back({p00, normal1, color1});
-                    vertices.push_back({p10, normal1, color1});
                     vertices.push_back({p01, normal1, color1});
+                    vertices.push_back({p10, normal1, color1});
                     indices.push_back(baseIdx);
                     indices.push_back(baseIdx + 1);
                     indices.push_back(baseIdx + 2);
                     
-                    // Triangle 2: p10, p11, p01
-                    glm::vec3 normal2 = glm::normalize(glm::cross(p11 - p10, p01 - p10));
+                    // Triangle 2: p10, p01, p11 (CCW winding for upward normal)
+                    glm::vec3 normal2 = glm::normalize(glm::cross(p01 - p10, p11 - p10));
                     float avgH2 = (h10 + h11 + h01) / 3.0f;
                     float normH2 = (avgH2 - minHeight) / heightRange;
                     glm::vec3 color2 = m_Settings.useHeightColors ? 
@@ -171,8 +171,8 @@ namespace Genesis {
                     
                     baseIdx = static_cast<uint32_t>(vertices.size());
                     vertices.push_back({p10, normal2, color2});
-                    vertices.push_back({p11, normal2, color2});
                     vertices.push_back({p01, normal2, color2});
+                    vertices.push_back({p11, normal2, color2});
                     indices.push_back(baseIdx);
                     indices.push_back(baseIdx + 1);
                     indices.push_back(baseIdx + 2);
@@ -209,31 +209,31 @@ namespace Genesis {
                     uint32_t i01 = (z + 1) * width + x;
                     uint32_t i11 = (z + 1) * width + (x + 1);
                     
-                    // Triangle 1
+                    // Triangle 1 (CCW: i00, i01, i10)
                     indices.push_back(i00);
-                    indices.push_back(i10);
                     indices.push_back(i01);
+                    indices.push_back(i10);
                     
                     glm::vec3 n1 = glm::cross(
-                        vertices[i10].Position - vertices[i00].Position,
-                        vertices[i01].Position - vertices[i00].Position
+                        vertices[i01].Position - vertices[i00].Position,
+                        vertices[i10].Position - vertices[i00].Position
                     );
                     normals[i00] += n1;
-                    normals[i10] += n1;
                     normals[i01] += n1;
+                    normals[i10] += n1;
                     
-                    // Triangle 2
+                    // Triangle 2 (CCW: i10, i01, i11)
                     indices.push_back(i10);
-                    indices.push_back(i11);
                     indices.push_back(i01);
+                    indices.push_back(i11);
                     
                     glm::vec3 n2 = glm::cross(
-                        vertices[i11].Position - vertices[i10].Position,
-                        vertices[i01].Position - vertices[i10].Position
+                        vertices[i01].Position - vertices[i10].Position,
+                        vertices[i11].Position - vertices[i10].Position
                     );
                     normals[i10] += n2;
-                    normals[i11] += n2;
                     normals[i01] += n2;
+                    normals[i11] += n2;
                 }
             }
             
