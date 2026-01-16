@@ -520,9 +520,6 @@ namespace Genesis
                     float ridgeContribution = ridgeNoise * m_TerrainSettings.ridgeWeight * upliftMask;
                     float baseWeight = 1.0f - (m_TerrainSettings.ridgeWeight * upliftMask);
                     height = height * baseWeight + ridgeContribution;
-
-                    // Ridge peak sharpening - extra boost at peaks
-                    height += std::pow(ridgeNoise, 4.0f) * m_TerrainSettings.peakBoost * upliftMask;
                 }
 
                 // Normalize to [0,1] and store raw height (shaping applied after erosion)
@@ -577,7 +574,7 @@ namespace Genesis
         }
 
         // Step 6: Apply height-dependent shaping (after erosion)
-        // Sharp peaks, soft bases: lerp(1.0, 0.6, heightNorm)
+        // Sharp peaks, soft bases: lerp(1.0, 0.6, heightNorm) + peak boost
         {
             float minH = m_TerrainSettings.baseHeight;
             float maxH = m_TerrainSettings.baseHeight + m_TerrainSettings.heightScale;
@@ -595,7 +592,12 @@ namespace Genesis
 
                     // Soft bases, sharp peaks: multiply by lerp(1.0, 0.6, h)
                     float shapeFactor = 1.0f - 0.4f * heightNorm;
-                    heightData[idx] = minH + (h - minH) * shapeFactor;
+                    h = minH + (h - minH) * shapeFactor;
+
+                    // Extra peak sharpening (guide: h += pow(hn, 4) * 0.3)
+                    h += std::pow(heightNorm, 4.0f) * m_TerrainSettings.peakBoost * range;
+
+                    heightData[idx] = h;
                 }
             }
         }
