@@ -179,8 +179,8 @@ namespace Genesis {
 
         // Initialize chunk-based world with biomes and water
         WorldSettings worldSettings;
-        worldSettings.chunkSize = 32;
-        worldSettings.cellSize = 1.0f;
+        worldSettings.chunkSize = 64;       // More cells per chunk
+        worldSettings.cellSize = 0.5f;      // Smaller cells = higher resolution
         worldSettings.viewDistance = 3;
         worldSettings.seed = 42;
         worldSettings.seaLevel = 2.0f;
