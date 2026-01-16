@@ -26,16 +26,16 @@ namespace Genesis
         float noiseX = x * m_Settings.noiseScale;
         float noiseZ = z * m_Settings.noiseScale;
 
-        float height;
+        // Get base terrain noise
+        float baseNoise = m_Noise.FBM(noiseX, noiseZ,
+                                      m_Settings.octaves,
+                                      m_Settings.persistence,
+                                      m_Settings.lacunarity);
+
+        float height = baseNoise;
 
         if (m_Settings.useRidgeNoise)
         {
-            // Get base noise for rolling hills
-            float baseNoise = m_Noise.FBM(noiseX, noiseZ,
-                                          m_Settings.octaves,
-                                          m_Settings.persistence,
-                                          m_Settings.lacunarity);
-
             // Get ridge noise for sharp mountain crests
             float ridgeNoiseX = noiseX * m_Settings.ridgeScale;
             float ridgeNoiseZ = noiseZ * m_Settings.ridgeScale;
@@ -47,16 +47,27 @@ namespace Genesis
             // Apply power function to sharpen ridge peaks
             ridgeNoise = std::pow(ridgeNoise, m_Settings.ridgePower);
 
-            // Blend base noise and ridge noise
-            float baseWeight = 1.0f - m_Settings.ridgeWeight;
-            height = baseNoise * baseWeight + ridgeNoise * m_Settings.ridgeWeight;
-        }
-        else
-        {
-            height = m_Noise.FBM(noiseX, noiseZ,
-                                 m_Settings.octaves,
-                                 m_Settings.persistence,
-                                 m_Settings.lacunarity);
+            // Calculate uplift mask - determines where mountains appear
+            float upliftMask = 1.0f;
+            if (m_Settings.useUpliftMask)
+            {
+                float upliftNoiseX = x * m_Settings.upliftScale;
+                float upliftNoiseZ = z * m_Settings.upliftScale;
+                float upliftNoise = m_Noise.FBM(upliftNoiseX, upliftNoiseZ, 2, 0.5f, 2.0f);
+                upliftNoise = (upliftNoise + 1.0f) * 0.5f; // Map to [0, 1]
+
+                // Smoothstep for gradual transition from plains to mountains
+                float t = (upliftNoise - m_Settings.upliftThresholdLow) /
+                          (m_Settings.upliftThresholdHigh - m_Settings.upliftThresholdLow);
+                t = std::clamp(t, 0.0f, 1.0f);
+                upliftMask = t * t * (3.0f - 2.0f * t); // Smoothstep
+                upliftMask = std::pow(upliftMask, m_Settings.upliftPower);
+            }
+
+            // Apply uplift mask to ridge contribution
+            float ridgeContribution = ridgeNoise * m_Settings.ridgeWeight * upliftMask;
+            float baseWeight = 1.0f - (m_Settings.ridgeWeight * upliftMask);
+            height = baseNoise * baseWeight + ridgeContribution;
         }
 
         // Map from [-1, 1] to [0, 1]

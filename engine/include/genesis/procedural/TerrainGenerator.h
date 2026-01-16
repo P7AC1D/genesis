@@ -37,6 +37,13 @@ namespace Genesis
         float ridgePower = 2.0f;   // Sharpness exponent (higher = sharper peaks)
         float ridgeScale = 1.0f;   // Scale multiplier for ridge noise
 
+        // Tectonic uplift mask - controls where mountains appear
+        bool useUpliftMask = true;        // Enable uplift mask for realistic mountain bands
+        float upliftScale = 0.02f;        // Scale of uplift noise (lower = larger mountain regions)
+        float upliftThresholdLow = 0.4f;  // Below this = plains (no mountains)
+        float upliftThresholdHigh = 0.7f; // Above this = full mountains
+        float upliftPower = 1.5f;         // Sharpening power for uplift transitions
+
         // Low-poly style
         bool flatShading = true; // Use face normals instead of smooth normals
 

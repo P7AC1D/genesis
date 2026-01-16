@@ -116,8 +116,27 @@ namespace Genesis
                                                         settings.lacunarity);
                     ridgeNoise = std::pow(ridgeNoise, settings.ridgePower);
 
-                    float baseWeight = 1.0f - settings.ridgeWeight;
-                    height = height * baseWeight + ridgeNoise * settings.ridgeWeight;
+                    // Calculate uplift mask - determines where mountains appear
+                    float upliftMask = 1.0f;
+                    if (settings.useUpliftMask)
+                    {
+                        float upliftNoiseX = worldX * settings.upliftScale;
+                        float upliftNoiseZ = worldZ * settings.upliftScale;
+                        float upliftNoise = noise.FBM(upliftNoiseX, upliftNoiseZ, 2, 0.5f, 2.0f);
+                        upliftNoise = (upliftNoise + 1.0f) * 0.5f; // Map to [0, 1]
+
+                        // Smoothstep for gradual transition from plains to mountains
+                        float t = (upliftNoise - settings.upliftThresholdLow) / 
+                                  (settings.upliftThresholdHigh - settings.upliftThresholdLow);
+                        t = std::clamp(t, 0.0f, 1.0f);
+                        upliftMask = t * t * (3.0f - 2.0f * t); // Smoothstep
+                        upliftMask = std::pow(upliftMask, settings.upliftPower);
+                    }
+
+                    // Apply uplift mask to ridge contribution
+                    float ridgeContribution = ridgeNoise * settings.ridgeWeight * upliftMask;
+                    float baseWeight = 1.0f - (settings.ridgeWeight * upliftMask);
+                    height = height * baseWeight + ridgeContribution;
                 }
 
                 height = (height + 1.0f) * 0.5f;

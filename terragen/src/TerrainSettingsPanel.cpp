@@ -243,6 +243,47 @@ namespace Genesis
                 }
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("Scale of ridge features relative to base noise");
+
+                ImGui::Separator();
+                ImGui::Text("Tectonic Uplift Mask");
+
+                if (ImGui::Checkbox("Enable Uplift Mask", &m_TerrainSettings.useUpliftMask))
+                {
+                    m_NeedsPreviewUpdate = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Mountains appear in bands, creating plains and foothills");
+
+                if (m_TerrainSettings.useUpliftMask)
+                {
+                    if (ImGui::SliderFloat("Uplift Scale", &m_TerrainSettings.upliftScale, 0.005f, 0.1f, "%.3f"))
+                    {
+                        m_NeedsPreviewUpdate = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Size of tectonic regions (smaller = larger mountain ranges)");
+
+                    if (ImGui::SliderFloat("Plains Threshold", &m_TerrainSettings.upliftThresholdLow, 0.0f, 0.6f, "%.2f"))
+                    {
+                        m_NeedsPreviewUpdate = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Below this = flat plains");
+
+                    if (ImGui::SliderFloat("Mountain Threshold", &m_TerrainSettings.upliftThresholdHigh, 0.4f, 1.0f, "%.2f"))
+                    {
+                        m_NeedsPreviewUpdate = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Above this = full mountain height");
+
+                    if (ImGui::SliderFloat("Transition Sharpness", &m_TerrainSettings.upliftPower, 0.5f, 3.0f, "%.1f"))
+                    {
+                        m_NeedsPreviewUpdate = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("How sharp the transition from plains to mountains");
+                }
             }
         }
     }
@@ -333,8 +374,27 @@ namespace Genesis
                                                         m_TerrainSettings.lacunarity);
                     ridgeNoise = std::pow(ridgeNoise, m_TerrainSettings.ridgePower);
 
-                    float baseWeight = 1.0f - m_TerrainSettings.ridgeWeight;
-                    height = height * baseWeight + ridgeNoise * m_TerrainSettings.ridgeWeight;
+                    // Calculate uplift mask - determines where mountains appear
+                    float upliftMask = 1.0f;
+                    if (m_TerrainSettings.useUpliftMask)
+                    {
+                        float upliftSampleX = static_cast<float>(x) * m_TerrainSettings.upliftScale * 2.0f;
+                        float upliftSampleY = static_cast<float>(y) * m_TerrainSettings.upliftScale * 2.0f;
+                        float upliftNoise = noise.FBM(upliftSampleX, upliftSampleY, 2, 0.5f, 2.0f);
+                        upliftNoise = (upliftNoise + 1.0f) * 0.5f; // Map to [0, 1]
+
+                        // Smoothstep for gradual transition from plains to mountains
+                        float t = (upliftNoise - m_TerrainSettings.upliftThresholdLow) / 
+                                  (m_TerrainSettings.upliftThresholdHigh - m_TerrainSettings.upliftThresholdLow);
+                        t = std::clamp(t, 0.0f, 1.0f);
+                        upliftMask = t * t * (3.0f - 2.0f * t); // Smoothstep
+                        upliftMask = std::pow(upliftMask, m_TerrainSettings.upliftPower);
+                    }
+
+                    // Apply uplift mask to ridge contribution
+                    float ridgeContribution = ridgeNoise * m_TerrainSettings.ridgeWeight * upliftMask;
+                    float baseWeight = 1.0f - (m_TerrainSettings.ridgeWeight * upliftMask);
+                    height = height * baseWeight + ridgeContribution;
                 }
 
                 height = (height + 1.0f) * 0.5f;
