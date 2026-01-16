@@ -224,4 +224,53 @@ namespace Genesis {
         return total / maxValue;
     }
 
+    float SimplexNoise::WarpedNoise(float x, float y, float warpStrength, float warpScale) const {
+        // Sample noise at offset positions to get warp offsets
+        // Using different offsets (5.2, 1.3) ensures the warp noise is uncorrelated with main noise
+        float warpX = Noise(x * warpScale + 5.2f, y * warpScale + 1.3f) * warpStrength;
+        float warpY = Noise(x * warpScale + 9.7f, y * warpScale + 2.8f) * warpStrength;
+        
+        // Sample the main noise at warped coordinates
+        return Noise(x + warpX, y + warpY);
+    }
+
+    float SimplexNoise::WarpedFBM(float x, float y, int octaves, float persistence, float lacunarity,
+                                   float warpStrength, float warpScale) const {
+        // First, calculate the warp offsets using FBM for smoother warping
+        float warpX = FBM(x * warpScale + 5.2f, y * warpScale + 1.3f, 3, 0.5f, 2.0f) * warpStrength;
+        float warpY = FBM(x * warpScale + 9.7f, y * warpScale + 2.8f, 3, 0.5f, 2.0f) * warpStrength;
+        
+        // Sample the main FBM at warped coordinates
+        return FBM(x + warpX, y + warpY, octaves, persistence, lacunarity);
+    }
+
+    float SimplexNoise::MultiWarpedFBM(float x, float y, int octaves, float persistence, float lacunarity,
+                                        float warpStrength, float warpScale, int warpLevels) const {
+        float wx = x;
+        float wy = y;
+        
+        // Apply multiple levels of warping
+        // Each level warps the already-warped coordinates
+        for (int level = 0; level < warpLevels; level++) {
+            // Use different offsets for each warp level
+            float offsetX = 5.2f + level * 17.1f;
+            float offsetY = 1.3f + level * 31.7f;
+            float offsetX2 = 9.7f + level * 23.5f;
+            float offsetY2 = 2.8f + level * 13.9f;
+            
+            // Reduce warp strength for each subsequent level
+            float levelWarp = warpStrength / (1.0f + level * 0.5f);
+            float levelScale = warpScale * (1.0f + level * 0.3f);
+            
+            float warpOffsetX = FBM(wx * levelScale + offsetX, wy * levelScale + offsetY, 2, 0.5f, 2.0f) * levelWarp;
+            float warpOffsetY = FBM(wx * levelScale + offsetX2, wy * levelScale + offsetY2, 2, 0.5f, 2.0f) * levelWarp;
+            
+            wx += warpOffsetX;
+            wy += warpOffsetY;
+        }
+        
+        // Final FBM at fully warped coordinates
+        return FBM(wx, wy, octaves, persistence, lacunarity);
+    }
+
 }

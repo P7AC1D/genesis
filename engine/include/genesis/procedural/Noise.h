@@ -23,6 +23,15 @@ namespace Genesis {
         // Ridge noise (inverted absolute value for mountain ridges)
         float RidgeNoise(float x, float y, int octaves, float persistence = 0.5f, float lacunarity = 2.0f) const;
 
+        // Domain warped noise - warps input coordinates for more organic patterns
+        float WarpedNoise(float x, float y, float warpStrength = 1.0f, float warpScale = 1.0f) const;
+        float WarpedFBM(float x, float y, int octaves, float persistence = 0.5f, float lacunarity = 2.0f,
+                        float warpStrength = 1.0f, float warpScale = 1.0f) const;
+        
+        // Multi-level domain warping (warp the warp) for even more organic results
+        float MultiWarpedFBM(float x, float y, int octaves, float persistence = 0.5f, float lacunarity = 2.0f,
+                             float warpStrength = 1.0f, float warpScale = 1.0f, int warpLevels = 2) const;
+
         void SetSeed(uint32_t seed);
 
     private:

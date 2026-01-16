@@ -272,7 +272,7 @@ Chunk::Generate() → Noise sampling → Mesh generation → GPU upload
 
 ### Next Steps
 - [x] **Water Rendering**: Flat water plane with transparency/reflection
-- [ ] **Biome System**: Different terrain parameters based on world position
+- [x] **Biome System**: Different terrain parameters based on world position
 - [ ] **ImGui Integration**: Debug overlay with FPS, stats, and controls
 - [ ] **Object Variation**: Random scale/rotation for trees and rocks
 - [ ] **Shadow Mapping**: Basic directional light shadows

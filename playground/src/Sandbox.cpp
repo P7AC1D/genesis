@@ -199,6 +199,12 @@ namespace Genesis {
         worldSettings.terrainSettings.flatShading = true;
         worldSettings.terrainSettings.useHeightColors = true;
         
+        // Domain warping for more organic terrain shapes
+        worldSettings.terrainSettings.useWarp = true;
+        worldSettings.terrainSettings.warpStrength = 0.4f;  // Moderate distortion
+        worldSettings.terrainSettings.warpScale = 0.5f;     // Warp at half terrain scale
+        worldSettings.terrainSettings.warpLevels = 2;       // Two levels of warping
+        
         m_ChunkManager.Initialize(device, worldSettings);
 
         // Initial chunk load

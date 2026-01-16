@@ -88,8 +88,16 @@ namespace Genesis {
                 float noiseX = worldX * settings.noiseScale;
                 float noiseZ = worldZ * settings.noiseScale;
                 
-                float height = noise.FBM(noiseX, noiseZ, 
-                    settings.octaves, settings.persistence, settings.lacunarity);
+                // Use domain warping if enabled for more organic terrain
+                float height;
+                if (settings.useWarp && settings.warpLevels > 0) {
+                    height = noise.MultiWarpedFBM(noiseX, noiseZ, 
+                        settings.octaves, settings.persistence, settings.lacunarity,
+                        settings.warpStrength, settings.warpScale, settings.warpLevels);
+                } else {
+                    height = noise.FBM(noiseX, noiseZ, 
+                        settings.octaves, settings.persistence, settings.lacunarity);
+                }
                 
                 height = (height + 1.0f) * 0.5f;
                 float baseHeight = settings.baseHeight + height * settings.heightScale;
@@ -285,8 +293,16 @@ namespace Genesis {
         float noiseX = worldX * settings.noiseScale;
         float noiseZ = worldZ * settings.noiseScale;
         
-        float height = noise.FBM(noiseX, noiseZ, 
-            settings.octaves, settings.persistence, settings.lacunarity);
+        // Use domain warping if enabled (must match GenerateWithWorldOffset)
+        float height;
+        if (settings.useWarp && settings.warpLevels > 0) {
+            height = noise.MultiWarpedFBM(noiseX, noiseZ, 
+                settings.octaves, settings.persistence, settings.lacunarity,
+                settings.warpStrength, settings.warpScale, settings.warpLevels);
+        } else {
+            height = noise.FBM(noiseX, noiseZ, 
+                settings.octaves, settings.persistence, settings.lacunarity);
+        }
         
         height = (height + 1.0f) * 0.5f;
         return settings.baseHeight + height * settings.heightScale;

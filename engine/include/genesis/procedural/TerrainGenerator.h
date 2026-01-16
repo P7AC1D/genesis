@@ -23,6 +23,12 @@ namespace Genesis {
         float persistence = 0.5f;
         float lacunarity = 2.0f;
 
+        // Domain warping settings
+        bool useWarp = true;
+        float warpStrength = 0.5f;  // How much to distort (0 = none, 1 = strong)
+        float warpScale = 0.5f;     // Scale of warp noise relative to terrain noise
+        int warpLevels = 2;         // Number of warp iterations (1-3 recommended)
+
         // Low-poly style
         bool flatShading = true;  // Use face normals instead of smooth normals
 
