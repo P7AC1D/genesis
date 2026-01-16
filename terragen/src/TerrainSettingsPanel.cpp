@@ -384,7 +384,7 @@ namespace Genesis
                         upliftNoise = (upliftNoise + 1.0f) * 0.5f; // Map to [0, 1]
 
                         // Smoothstep for gradual transition from plains to mountains
-                        float t = (upliftNoise - m_TerrainSettings.upliftThresholdLow) / 
+                        float t = (upliftNoise - m_TerrainSettings.upliftThresholdLow) /
                                   (m_TerrainSettings.upliftThresholdHigh - m_TerrainSettings.upliftThresholdLow);
                         t = std::clamp(t, 0.0f, 1.0f);
                         upliftMask = t * t * (3.0f - 2.0f * t); // Smoothstep
