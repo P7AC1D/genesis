@@ -1,0 +1,47 @@
+# Build directories
+build/
+out/
+cmake-build-*/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Compiled files
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Generated files
+compile_commands.json
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Vulkan shader compilation
+*.spv
+
+# Dependencies (fetched by CMake)
+engine/vendor/glfw/
+engine/vendor/glm/
+engine/vendor/stb/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
