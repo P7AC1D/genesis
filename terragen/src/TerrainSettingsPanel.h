@@ -26,6 +26,7 @@ namespace Genesis
     private:
         void RenderTerrainSection();
         void RenderNoiseSection();
+        void RenderRidgeNoiseSection();
         void RenderWarpingSection();
         void RenderColorSection();
         void RenderWaterSection();

@@ -105,6 +105,21 @@ namespace Genesis
                                        settings.octaves, settings.persistence, settings.lacunarity);
                 }
 
+                // Blend ridge noise for mountain ranges
+                if (settings.useRidgeNoise)
+                {
+                    float ridgeNoiseX = noiseX * settings.ridgeScale;
+                    float ridgeNoiseZ = noiseZ * settings.ridgeScale;
+                    float ridgeNoise = noise.RidgeNoise(ridgeNoiseX, ridgeNoiseZ,
+                                                        settings.octaves,
+                                                        settings.persistence,
+                                                        settings.lacunarity);
+                    ridgeNoise = std::pow(ridgeNoise, settings.ridgePower);
+
+                    float baseWeight = 1.0f - settings.ridgeWeight;
+                    height = height * baseWeight + ridgeNoise * settings.ridgeWeight;
+                }
+
                 height = (height + 1.0f) * 0.5f;
                 heightmap[z * width + x] = settings.baseHeight + height * settings.heightScale;
             }

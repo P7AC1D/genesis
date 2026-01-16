@@ -53,6 +53,8 @@ namespace Genesis
         ImGui::Separator();
         RenderNoiseSection();
         ImGui::Separator();
+        RenderRidgeNoiseSection();
+        ImGui::Separator();
         RenderWarpingSection();
         ImGui::Separator();
         RenderColorSection();
@@ -208,6 +210,43 @@ namespace Genesis
         }
     }
 
+    void TerrainSettingsPanel::RenderRidgeNoiseSection()
+    {
+        if (ImGui::CollapsingHeader("Ridge Noise (Mountains)", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::Checkbox("Enable Ridge Noise", &m_TerrainSettings.useRidgeNoise))
+            {
+                m_NeedsPreviewUpdate = true;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Use ridge noise to create sharp mountain ranges instead of smooth hills");
+
+            if (m_TerrainSettings.useRidgeNoise)
+            {
+                if (ImGui::SliderFloat("Ridge Weight", &m_TerrainSettings.ridgeWeight, 0.0f, 1.0f, "%.2f"))
+                {
+                    m_NeedsPreviewUpdate = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Blend weight: 0 = smooth hills, 1 = sharp ridges");
+
+                if (ImGui::SliderFloat("Ridge Sharpness", &m_TerrainSettings.ridgePower, 1.0f, 4.0f, "%.1f"))
+                {
+                    m_NeedsPreviewUpdate = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Power exponent: higher = sharper peaks");
+
+                if (ImGui::SliderFloat("Ridge Scale", &m_TerrainSettings.ridgeScale, 0.5f, 2.0f, "%.2f"))
+                {
+                    m_NeedsPreviewUpdate = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Scale of ridge features relative to base noise");
+            }
+        }
+    }
+
     void TerrainSettingsPanel::RenderColorSection()
     {
         if (ImGui::CollapsingHeader("Colors & Shading"))
@@ -281,6 +320,21 @@ namespace Genesis
                                        m_TerrainSettings.octaves,
                                        m_TerrainSettings.persistence,
                                        m_TerrainSettings.lacunarity);
+                }
+
+                // Blend ridge noise for mountain ranges
+                if (m_TerrainSettings.useRidgeNoise)
+                {
+                    float ridgeSampleX = sampleX * m_TerrainSettings.ridgeScale;
+                    float ridgeSampleY = sampleY * m_TerrainSettings.ridgeScale;
+                    float ridgeNoise = noise.RidgeNoise(ridgeSampleX, ridgeSampleY,
+                                                        m_TerrainSettings.octaves,
+                                                        m_TerrainSettings.persistence,
+                                                        m_TerrainSettings.lacunarity);
+                    ridgeNoise = std::pow(ridgeNoise, m_TerrainSettings.ridgePower);
+
+                    float baseWeight = 1.0f - m_TerrainSettings.ridgeWeight;
+                    height = height * baseWeight + ridgeNoise * m_TerrainSettings.ridgeWeight;
                 }
 
                 height = (height + 1.0f) * 0.5f;
