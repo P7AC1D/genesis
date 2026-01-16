@@ -106,22 +106,20 @@ namespace Genesis {
     void Sandbox::OnRender() {
         auto& renderer = Application::Get().GetRenderer();
         
-        renderer.BeginScene(m_Camera);
+        // Only render if frame started successfully
+        if (!renderer.IsFrameInProgress()) return;
 
-        // Render scene
-        if (m_Scene) {
-            m_Scene->OnRender(renderer);
-        }
+        renderer.BeginScene(m_Camera);
 
         // Render test meshes with transforms
         if (m_PlaneMesh) {
             glm::mat4 groundTransform = glm::scale(glm::mat4(1.0f), glm::vec3(50.0f, 1.0f, 50.0f));
-            renderer.Submit(*m_PlaneMesh, groundTransform);
+            renderer.Draw(*m_PlaneMesh, groundTransform);
         }
 
         if (m_CubeMesh) {
             glm::mat4 cubeTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.5f, 0.0f));
-            renderer.Submit(*m_CubeMesh, cubeTransform);
+            renderer.Draw(*m_CubeMesh, cubeTransform);
         }
 
         // Render procedural trees
@@ -130,7 +128,7 @@ namespace Genesis {
                 float x = (i - 5) * 3.0f;
                 float z = -5.0f + (i % 3) * 2.0f;
                 glm::mat4 treeTransform = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, z));
-                renderer.Submit(*m_TreeMesh, treeTransform);
+                renderer.Draw(*m_TreeMesh, treeTransform);
             }
         }
 
@@ -140,7 +138,7 @@ namespace Genesis {
                 float x = (i - 2) * 2.5f + 0.5f;
                 float z = 3.0f;
                 glm::mat4 rockTransform = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.15f, z));
-                renderer.Submit(*m_RockMesh, rockTransform);
+                renderer.Draw(*m_RockMesh, rockTransform);
             }
         }
 

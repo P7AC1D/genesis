@@ -108,12 +108,13 @@ namespace Genesis {
 
             OnUpdate(deltaTime);
 
-            // Render
-            m_Renderer->BeginFrame();
-            for (Layer* layer : *m_LayerStack) {
-                layer->OnRender();
+            // Render - only if BeginFrame succeeds (swapchain might be recreating)
+            if (m_Renderer->BeginFrame()) {
+                for (Layer* layer : *m_LayerStack) {
+                    layer->OnRender();
+                }
+                m_Renderer->EndFrame();
             }
-            m_Renderer->EndFrame();
         }
     }
 

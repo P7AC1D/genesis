@@ -5,19 +5,28 @@ layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec3 inColor;
 layout(location = 3) in vec2 inTexCoord;
 
-layout(binding = 0) uniform UniformBufferObject {
-    mat4 model;
+layout(set = 0, binding = 0) uniform GlobalUBO {
     mat4 view;
-    mat4 proj;
+    mat4 projection;
+    vec4 lightDirection;
+    vec4 lightColor;
+    vec4 ambientColor;
 } ubo;
+
+layout(push_constant) uniform PushConstants {
+    mat4 model;
+    mat4 normalMatrix;
+} push;
 
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec3 fragPos;
 
 void main() {
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
+    vec4 worldPos = push.model * vec4(inPosition, 1.0);
+    gl_Position = ubo.projection * ubo.view * worldPos;
+    
     fragColor = inColor;
-    fragNormal = mat3(transpose(inverse(ubo.model))) * inNormal;
-    fragPos = vec3(ubo.model * vec4(inPosition, 1.0));
+    fragNormal = mat3(push.normalMatrix) * inNormal;
+    fragPos = worldPos.xyz;
 }
