@@ -72,6 +72,13 @@ namespace Genesis
         if (!m_Device)
             return;
 
+        // Process deferred regeneration at frame start (before rendering)
+        if (m_NeedsRegeneration)
+        {
+            PerformRegeneration();
+            m_NeedsRegeneration = false;
+        }
+
         glm::ivec2 cameraChunk = WorldToChunkCoord(cameraPosition.x, cameraPosition.z);
 
         if (cameraChunk == m_LastCameraChunk)
@@ -135,6 +142,9 @@ namespace Genesis
 
         auto chunk = std::make_unique<Chunk>(chunkX, chunkZ, m_Settings.chunkSize, m_Settings.cellSize);
         float seaLevel = m_Settings.waterEnabled ? m_Settings.seaLevel : -1000.0f;
+        
+        GEN_DEBUG("LoadChunk - using heightScale: {}, noiseScale: {}", 
+                  m_Settings.terrainSettings.heightScale, m_Settings.terrainSettings.noiseScale);
         
         chunk->Generate(m_Settings.terrainSettings, m_Settings.seed, seaLevel);
         chunk->Upload(*m_Device);
@@ -229,6 +239,64 @@ namespace Genesis
     {
         m_Settings.viewDistance = distance;
         m_LastCameraChunk = glm::ivec2(INT_MAX, INT_MAX);
+    }
+
+    void ChunkManager::RegenerateAllChunks()
+    {
+        // Defer regeneration to next Update() call to avoid Vulkan sync issues
+        GEN_INFO("RegenerateAllChunks: scheduling deferred regeneration");
+        GEN_INFO("New settings: heightScale={}, noiseScale={}, octaves={}", 
+                 m_Settings.terrainSettings.heightScale, 
+                 m_Settings.terrainSettings.noiseScale,
+                 m_Settings.terrainSettings.octaves);
+        m_NeedsRegeneration = true;
+    }
+
+    void ChunkManager::PerformRegeneration()
+    {
+        if (!m_Device)
+        {
+            GEN_ERROR("PerformRegeneration: m_Device is null!");
+            return;
+        }
+
+        GEN_INFO("PerformRegeneration: starting...");
+
+        m_Device->WaitIdle();
+
+        std::vector<glm::ivec2> chunksToRegenerate;
+        for (const auto& [coord, chunk] : m_LoadedChunks)
+        {
+            chunksToRegenerate.push_back(coord);
+        }
+
+        GEN_INFO("Unloading {} chunks...", chunksToRegenerate.size());
+        for (const auto& coord : chunksToRegenerate)
+        {
+            UnloadChunk(coord.x, coord.y);
+        }
+
+        GEN_INFO("Reloading {} chunks...", chunksToRegenerate.size());
+        for (const auto& coord : chunksToRegenerate)
+        {
+            LoadChunk(coord.x, coord.y);
+        }
+
+        RebuildObjectPositions();
+        GEN_INFO("Regenerated {} chunks with updated settings", chunksToRegenerate.size());
+    }
+
+    void ChunkManager::UpdateTerrainSettings(const TerrainSettings& settings)
+    {
+        m_Settings.terrainSettings = settings;
+        RegenerateAllChunks();
+    }
+
+    void ChunkManager::UpdateWorldSettings(float seaLevel, bool waterEnabled)
+    {
+        m_Settings.seaLevel = seaLevel;
+        m_Settings.waterEnabled = waterEnabled;
+        RegenerateAllChunks();
     }
 
 }

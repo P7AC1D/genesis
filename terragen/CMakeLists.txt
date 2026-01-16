@@ -2,6 +2,7 @@ set(TERRAGEN_SOURCES
     src/main.cpp
     src/TerragenApp.cpp
     src/Sandbox.cpp
+    src/TerrainSettingsPanel.cpp
 )
 
 add_executable(Terragen ${TERRAGEN_SOURCES})

@@ -1,5 +1,7 @@
 #include "Sandbox.h"
+#include "TerrainSettingsPanel.h"
 #include <genesis/renderer/VulkanDevice.h>
+#include <imgui.h>
 
 namespace Genesis
 {
@@ -29,6 +31,13 @@ namespace Genesis
 
         // Wait for GPU to finish before cleanup
         Application::Get().GetRenderer().GetDevice().WaitIdle();
+
+        // Shutdown terrain panel first
+        if (m_TerrainPanel)
+        {
+            m_TerrainPanel->Shutdown();
+            m_TerrainPanel.reset();
+        }
 
         // Shutdown chunk manager first
         m_ChunkManager.Shutdown();
@@ -134,6 +143,15 @@ namespace Genesis
             Application::Get().GetRenderer().GetLightManager().SetTimeOfDay(m_TimeOfDay);
         }
 
+        // Toggle UI with Tab key (using simple debounce)
+        static bool tabWasPressed = false;
+        bool tabPressed = Input::IsKeyPressed(static_cast<int>(Key::Tab));
+        if (tabPressed && !tabWasPressed)
+        {
+            m_ShowUI = !m_ShowUI;
+        }
+        tabWasPressed = tabPressed;
+
         m_Camera.SetPosition(m_CameraPosition);
         m_Camera.SetRotation(m_CameraRotation);
 
@@ -195,7 +213,46 @@ namespace Genesis
 
     void Sandbox::OnImGuiRender()
     {
-        // Debug overlay would go here
+        if (!m_ShowUI)
+            return;
+
+        // Render terrain settings panel
+        if (m_TerrainPanel)
+        {
+            m_TerrainPanel->Render();
+        }
+
+        // Render debug/stats overlay
+        ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(250, 200), ImGuiCond_FirstUseEver);
+        ImGui::Begin("Stats & Controls", nullptr, ImGuiWindowFlags_NoCollapse);
+
+        ImGui::Text("FPS: %.1f (%.2f ms)", 1.0f / m_FrameTime, m_FrameTime * 1000.0f);
+        ImGui::Text("Chunks: %d", m_ChunkManager.GetLoadedChunkCount());
+        ImGui::Text("Trees: %zu", m_ChunkManager.GetAllTreePositions().size());
+        ImGui::Text("Rocks: %zu", m_ChunkManager.GetAllRockPositions().size());
+
+        ImGui::Separator();
+        ImGui::Text("Camera Position:");
+        ImGui::Text("  X: %.1f  Y: %.1f  Z: %.1f",
+            m_CameraPosition.x, m_CameraPosition.y, m_CameraPosition.z);
+
+        ImGui::Separator();
+        ImGui::SliderFloat("Time of Day", &m_TimeOfDay, 0.0f, 24.0f, "%.1f h");
+        if (ImGui::IsItemDeactivatedAfterEdit())
+        {
+            Application::Get().GetRenderer().GetLightManager().SetTimeOfDay(m_TimeOfDay);
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Controls:");
+        ImGui::BulletText("WASD - Move");
+        ImGui::BulletText("Space/Shift - Up/Down");
+        ImGui::BulletText("Right Mouse - Look");
+        ImGui::BulletText("T/Shift+T - Time");
+        ImGui::BulletText("Tab - Toggle UI");
+
+        ImGui::End();
     }
 
     void Sandbox::OnEvent(Event &event)
@@ -242,6 +299,10 @@ namespace Genesis
 
         // Initial chunk load
         m_ChunkManager.Update(m_CameraPosition);
+
+        // Initialize terrain settings panel
+        m_TerrainPanel = std::make_unique<TerrainSettingsPanel>();
+        m_TerrainPanel->Initialize(device, m_ChunkManager);
 
         // Setup lighting
         SetupLighting();

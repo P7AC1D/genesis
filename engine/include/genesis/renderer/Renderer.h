@@ -87,6 +87,7 @@ namespace Genesis
 
         VulkanContext &GetContext() { return *m_Context; }
         VulkanDevice &GetDevice() { return *m_Device; }
+        VulkanSwapchain &GetSwapchain() { return *m_Swapchain; }
         VkCommandBuffer GetCurrentCommandBuffer() const { return m_CommandBuffers[m_CurrentFrameIndex]; }
 
         // Lighting

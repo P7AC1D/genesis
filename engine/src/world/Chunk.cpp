@@ -1,6 +1,7 @@
 #include "genesis/world/Chunk.h"
 #include "genesis/renderer/VulkanDevice.h"
 #include "genesis/procedural/Water.h"
+#include "genesis/core/Log.h"
 #include <random>
 #include <cmath>
 
@@ -35,6 +36,9 @@ namespace Genesis
 
     void Chunk::Generate(const TerrainSettings &settings, uint32_t worldSeed, float seaLevel)
     {
+        GEN_DEBUG("Chunk::Generate - heightScale: {}, noiseScale: {}, useWarp: {}", 
+                  settings.heightScale, settings.noiseScale, settings.useWarp);
+        
         // Configure terrain generator
         TerrainSettings chunkSettings = settings;
         chunkSettings.width = m_Size;

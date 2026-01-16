@@ -12,6 +12,10 @@ namespace Genesis {
     void TerragenApp::OnInit() {
         GEN_INFO("Terragen initializing...");
         
+        // Push ImGui layer as overlay
+        m_ImGuiLayer = new ImGuiLayer();
+        PushOverlay(m_ImGuiLayer);
+
         m_Sandbox = new Sandbox();
         PushLayer(m_Sandbox);
     }
@@ -29,8 +33,8 @@ namespace Genesis {
         ApplicationConfig config;
         config.Name = "Terragen";
         config.Window.Title = "Terragen";
-        config.Window.Width = 1280;
-        config.Window.Height = 720;
+        config.Window.Width = 1600;
+        config.Window.Height = 900;
         config.EnableValidationLayers = true;
 
         return new TerragenApp(config);

@@ -15,6 +15,7 @@ set(ENGINE_SOURCES
     src/renderer/Mesh.cpp
     src/renderer/Camera.cpp
     src/renderer/Light.cpp
+    src/renderer/HeightmapTexture.cpp
     
     src/ecs/Scene.cpp
     src/ecs/Entity.cpp
@@ -26,6 +27,8 @@ set(ENGINE_SOURCES
     
     src/world/Chunk.cpp
     src/world/ChunkManager.cpp
+    
+    src/imgui/ImGuiLayer.cpp
     
     src/platform/PlatformDetection.cpp
 )
@@ -62,6 +65,7 @@ target_link_libraries(GenesisEngine
         Vulkan::Vulkan
         glfw
         glm
+        imgui
 )
 
 target_precompile_headers(GenesisEngine PRIVATE

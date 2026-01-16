@@ -59,7 +59,15 @@ namespace Genesis {
 
         // Settings
         const WorldSettings& GetSettings() const { return m_Settings; }
+        WorldSettings& GetSettings() { return m_Settings; }
         void SetViewDistance(int distance);
+        void RegenerateAllChunks();
+        void UpdateTerrainSettings(const TerrainSettings& settings);
+        void UpdateWorldSettings(float seaLevel, bool waterEnabled);
+        
+        // Request chunk regeneration (deferred to next Update call)
+        void RequestRegeneration() { m_NeedsRegeneration = true; }
+        bool NeedsRegeneration() const { return m_NeedsRegeneration; }
 
         // Stats
         int GetLoadedChunkCount() const { return static_cast<int>(m_LoadedChunks.size()); }
@@ -74,6 +82,7 @@ namespace Genesis {
         void LoadChunk(int chunkX, int chunkZ);
         void UnloadChunk(int chunkX, int chunkZ);
         void RebuildObjectPositions();
+        void PerformRegeneration();
 
     private:
         VulkanDevice* m_Device = nullptr;
@@ -86,6 +95,7 @@ namespace Genesis {
         std::vector<glm::vec3> m_AllRockPositions;
         
         glm::mat4 m_TerrainTransform{1.0f};
+        bool m_NeedsRegeneration = false;
     };
 
 }

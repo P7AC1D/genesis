@@ -5,6 +5,7 @@
 namespace Genesis {
 
     class Sandbox;
+    class ImGuiLayer;
 
     class TerragenApp : public Application {
     public:
@@ -18,6 +19,7 @@ namespace Genesis {
 
     private:
         Sandbox* m_Sandbox = nullptr;
+        ImGuiLayer* m_ImGuiLayer = nullptr;
     };
 
 }

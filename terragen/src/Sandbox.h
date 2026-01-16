@@ -5,6 +5,9 @@
 
 namespace Genesis {
 
+    class TerrainSettingsPanel;
+    class ImGuiLayer;
+
     // Sandbox layer for testing engine features
     class Sandbox : public Layer {
     public:
@@ -51,6 +54,10 @@ namespace Genesis {
         float m_FrameTime = 0.0f;
         float m_TotalTime = 0.0f;
         int m_FrameCount = 0;
+
+        // UI
+        std::unique_ptr<TerrainSettingsPanel> m_TerrainPanel;
+        bool m_ShowUI = true;
     };
 
 }

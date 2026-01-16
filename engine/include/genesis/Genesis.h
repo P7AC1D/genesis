@@ -28,5 +28,8 @@
 #include "genesis/world/Chunk.h"
 #include "genesis/world/ChunkManager.h"
 
+// ImGui
+#include "genesis/imgui/ImGuiLayer.h"
+
 // Math
 #include "genesis/math/Math.h"

@@ -3,6 +3,7 @@
 #include "genesis/core/Log.h"
 #include "genesis/core/Layer.h"
 #include "genesis/renderer/Renderer.h"
+#include "genesis/imgui/ImGuiLayer.h"
 
 #include <GLFW/glfw3.h>
 #include <chrono>
@@ -52,6 +53,14 @@ namespace Genesis {
 
         std::vector<Layer*>::iterator begin() { return m_Layers.begin(); }
         std::vector<Layer*>::iterator end() { return m_Layers.end(); }
+
+        Layer* FindImGuiLayer() {
+            for (Layer* layer : m_Layers) {
+                if (layer->GetName() == "ImGuiLayer")
+                    return layer;
+            }
+            return nullptr;
+        }
 
     private:
         std::vector<Layer*> m_Layers;
@@ -113,6 +122,18 @@ namespace Genesis {
                 for (Layer* layer : *m_LayerStack) {
                     layer->OnRender();
                 }
+
+                // ImGui rendering
+                Layer* imguiLayerBase = m_LayerStack->FindImGuiLayer();
+                if (imguiLayerBase) {
+                    ImGuiLayer* imguiLayer = static_cast<ImGuiLayer*>(imguiLayerBase);
+                    imguiLayer->Begin();
+                    for (Layer* layer : *m_LayerStack) {
+                        layer->OnImGuiRender();
+                    }
+                    imguiLayer->End();
+                }
+
                 m_Renderer->EndFrame();
             }
         }
