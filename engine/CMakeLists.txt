@@ -14,6 +14,7 @@ set(ENGINE_SOURCES
     src/renderer/VulkanBuffer.cpp
     src/renderer/Mesh.cpp
     src/renderer/Camera.cpp
+    src/renderer/Light.cpp
     
     src/ecs/Scene.cpp
     src/ecs/Entity.cpp

@@ -10,6 +10,7 @@
 #include "genesis/core/Log.h"
 
 #include <array>
+#include <cmath>
 #include <stdexcept>
 
 namespace Genesis {
@@ -353,6 +354,28 @@ namespace Genesis {
         // Update uniform buffer with camera matrices
         m_GlobalUBO.ViewMatrix = camera.GetViewMatrix();
         m_GlobalUBO.ProjectionMatrix = camera.GetProjectionMatrix();
+        m_GlobalUBO.CameraPosition = glm::vec4(camera.GetPosition(), 1.0f);
+        
+        // Update lighting data from LightManager
+        const auto& dirLight = m_LightManager.GetDirectionalLight();
+        m_GlobalUBO.SunDirection = glm::vec4(glm::normalize(dirLight.Direction), 0.0f);
+        m_GlobalUBO.SunColor = glm::vec4(dirLight.Color, dirLight.Intensity);
+        
+        const auto& settings = m_LightManager.GetSettings();
+        m_GlobalUBO.AmbientColor = glm::vec4(settings.AmbientColor, settings.AmbientIntensity);
+        m_GlobalUBO.FogColorAndDensity = glm::vec4(settings.FogColor, settings.FogDensity);
+        
+        // Update point lights
+        const auto& pointLights = m_LightManager.GetPointLights();
+        m_GlobalUBO.NumPointLights.x = static_cast<int>(pointLights.size());
+        
+        for (size_t i = 0; i < pointLights.size() && i < MAX_POINT_LIGHTS; i++) {
+            const auto& light = pointLights[i];
+            m_GlobalUBO.PointLights[i].PositionAndIntensity = glm::vec4(light.Position, light.Intensity);
+            // Calculate radius from attenuation (where light contribution becomes negligible)
+            float radius = 16.0f / std::sqrt(light.Quadratic);
+            m_GlobalUBO.PointLights[i].ColorAndRadius = glm::vec4(light.Color, radius);
+        }
 
         m_UniformBuffers[m_CurrentFrameIndex]->WriteToBuffer(&m_GlobalUBO, sizeof(GlobalUBO));
 

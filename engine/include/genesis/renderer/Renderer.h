@@ -1,5 +1,6 @@
 #pragma once
 
+#include "genesis/renderer/Light.h"
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 #include <memory>
@@ -22,19 +23,37 @@ namespace Genesis {
         float FrameTime = 0.0f;
     };
 
-    // Push constant for MVP matrix
+    // Push constant for model matrix
     struct PushConstantData {
         glm::mat4 ModelMatrix{1.0f};
         glm::mat4 NormalMatrix{1.0f};
     };
 
-    // Uniform buffer for view/projection
+    // Point light data for shader (must match shader layout)
+    struct PointLightData {
+        glm::vec4 PositionAndIntensity{0.0f};  // xyz = position, w = intensity
+        glm::vec4 ColorAndRadius{1.0f};         // xyz = color, w = radius
+    };
+
+    // Uniform buffer for global scene data
     struct GlobalUBO {
         glm::mat4 ViewMatrix{1.0f};
         glm::mat4 ProjectionMatrix{1.0f};
-        glm::vec4 LightDirection{-0.2f, -1.0f, -0.3f, 0.0f};
-        glm::vec4 LightColor{1.0f, 0.95f, 0.9f, 1.0f};
-        glm::vec4 AmbientColor{0.3f, 0.3f, 0.3f, 1.0f};
+        glm::vec4 CameraPosition{0.0f};
+        
+        // Directional light (sun)
+        glm::vec4 SunDirection{-0.2f, -1.0f, -0.3f, 0.0f};
+        glm::vec4 SunColor{1.0f, 0.95f, 0.9f, 1.0f};  // xyz = color, w = intensity
+        
+        // Ambient
+        glm::vec4 AmbientColor{0.15f, 0.15f, 0.2f, 1.0f};  // xyz = color, w = intensity
+        
+        // Point lights
+        PointLightData PointLights[MAX_POINT_LIGHTS];
+        glm::ivec4 NumPointLights{0};  // x = count, yzw = padding
+        
+        // Fog
+        glm::vec4 FogColorAndDensity{0.7f, 0.8f, 0.9f, 0.0f};  // xyz = color, w = density
     };
 
     class Renderer {
@@ -61,6 +80,10 @@ namespace Genesis {
         VulkanContext& GetContext() { return *m_Context; }
         VulkanDevice& GetDevice() { return *m_Device; }
         VkCommandBuffer GetCurrentCommandBuffer() const { return m_CommandBuffers[m_CurrentFrameIndex]; }
+        
+        // Lighting
+        LightManager& GetLightManager() { return m_LightManager; }
+        const LightManager& GetLightManager() const { return m_LightManager; }
 
         const RenderStats& GetStats() const { return m_Stats; }
         void ResetStats();
@@ -112,6 +135,9 @@ namespace Genesis {
 
         // Current scene data
         GlobalUBO m_GlobalUBO;
+        
+        // Lighting
+        LightManager m_LightManager;
 
         RenderStats m_Stats;
     };

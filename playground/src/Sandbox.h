@@ -20,6 +20,7 @@ namespace Genesis {
 
     private:
         void SetupScene();
+        void SetupLighting();
 
     private:
         std::shared_ptr<Scene> m_Scene;
@@ -41,6 +42,10 @@ namespace Genesis {
 
         glm::vec2 m_LastMousePosition{0.0f, 0.0f};
         bool m_FirstMouse = true;
+
+        // Time of day
+        float m_TimeOfDay = 10.0f;  // Morning
+        float m_TimeSpeed = 0.0f;    // Hours per second (0 = paused)
 
         // Debug info
         float m_FrameTime = 0.0f;

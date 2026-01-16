@@ -94,6 +94,19 @@ namespace Genesis {
             m_FirstMouse = true;
         }
 
+        // Time of day controls: T to advance, Shift+T to reverse
+        if (Input::IsKeyPressed(static_cast<int>(Key::T))) {
+            if (Input::IsKeyPressed(static_cast<int>(Key::LeftShift))) {
+                m_TimeOfDay -= deltaTime * 2.0f;  // 2 hours per second backwards
+            } else {
+                m_TimeOfDay += deltaTime * 2.0f;  // 2 hours per second forward
+            }
+            if (m_TimeOfDay < 0) m_TimeOfDay += 24.0f;
+            if (m_TimeOfDay >= 24.0f) m_TimeOfDay -= 24.0f;
+            
+            Application::Get().GetRenderer().GetLightManager().SetTimeOfDay(m_TimeOfDay);
+        }
+
         m_Camera.SetPosition(m_CameraPosition);
         m_Camera.SetRotation(m_CameraRotation);
 
@@ -180,8 +193,30 @@ namespace Genesis {
         // Initial chunk load
         m_ChunkManager.Update(m_CameraPosition);
 
+        // Setup lighting
+        SetupLighting();
+
         GEN_INFO("Scene setup complete with chunk-based world ({}x{} chunks visible)", 
             worldSettings.viewDistance * 2 + 1, worldSettings.viewDistance * 2 + 1);
+    }
+
+    void Sandbox::SetupLighting() {
+        auto& lightManager = Application::Get().GetRenderer().GetLightManager();
+        
+        // Set initial time of day
+        lightManager.SetTimeOfDay(m_TimeOfDay);
+        
+        // Add a few point lights for testing
+        Light campfireLight;
+        campfireLight.Position = glm::vec3(5.0f, 2.0f, 5.0f);
+        campfireLight.Color = glm::vec3(1.0f, 0.6f, 0.2f);  // Orange/fire color
+        campfireLight.Intensity = 2.0f;
+        lightManager.AddPointLight(campfireLight);
+        
+        // Enable subtle fog for atmosphere
+        lightManager.SetFogDensity(0.005f);
+        
+        GEN_INFO("Lighting setup complete - Time of day: {}:00, Press T to change time", static_cast<int>(m_TimeOfDay));
     }
 
 }

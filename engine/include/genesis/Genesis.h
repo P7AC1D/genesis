@@ -12,6 +12,7 @@
 #include "genesis/renderer/Renderer.h"
 #include "genesis/renderer/Camera.h"
 #include "genesis/renderer/Mesh.h"
+#include "genesis/renderer/Light.h"
 
 // ECS
 #include "genesis/ecs/Scene.h"
