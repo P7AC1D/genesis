@@ -33,36 +33,30 @@ namespace Genesis {
         settings.depth = m_Size;
         settings.cellSize = m_CellSize;
         
-        // Combine world seed with chunk position for unique but deterministic chunk generation
-        settings.seed = worldSeed ^ (static_cast<uint32_t>(m_ChunkX * 73856093) ^ 
-                                     static_cast<uint32_t>(m_ChunkZ * 19349663));
+        // Keep world seed for terrain - must be same across all chunks for seamless noise
+        settings.seed = worldSeed;
         
         m_TerrainGenerator.SetSettings(settings);
         
         // Generate with world-space offset for seamless noise
         glm::vec3 worldPos = GetWorldPosition();
         
-        // We need to sample noise at world coordinates, not local coordinates
-        // Modify the terrain generator to use world offset
-        TerrainSettings offsetSettings = settings;
-        
-        // Generate the mesh - TerrainGenerator will create vertices in local space
-        // but sample noise from world space coordinates
-        auto terrainMesh = GenerateWithWorldOffset(worldPos.x, worldPos.z);
+        // Generate the mesh - vertices in local space, noise sampled from world space
+        auto terrainMesh = GenerateWithWorldOffset(worldPos.x, worldPos.z, worldSeed);
         
         if (terrainMesh) {
             m_Mesh = std::make_unique<Mesh>(terrainMesh->GetVertices(), terrainMesh->GetIndices());
         }
         
-        // Generate object positions
+        // Generate object positions (uses chunk-specific seed derived from world seed)
         GenerateObjects(worldSeed);
         
         m_State = ChunkState::Loading;
     }
 
-    std::shared_ptr<Mesh> Chunk::GenerateWithWorldOffset(float offsetX, float offsetZ) {
+    std::shared_ptr<Mesh> Chunk::GenerateWithWorldOffset(float offsetX, float offsetZ, uint32_t worldSeed) {
         const auto& settings = m_TerrainGenerator.GetSettings();
-        SimplexNoise noise(settings.seed);
+        SimplexNoise noise(worldSeed);  // Use world seed, not chunk seed
         
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
@@ -72,8 +66,6 @@ namespace Genesis {
         
         // Generate heightmap with world-space noise sampling
         std::vector<float> heightmap(width * depth);
-        float minHeight = FLT_MAX;
-        float maxHeight = -FLT_MAX;
         
         for (int z = 0; z < depth; z++) {
             for (int x = 0; x < width; x++) {
@@ -96,13 +88,14 @@ namespace Genesis {
                 height = settings.baseHeight + height * settings.heightScale;
                 
                 heightmap[z * width + x] = height;
-                minHeight = std::min(minHeight, height);
-                maxHeight = std::max(maxHeight, height);
             }
         }
         
-        float heightRange = maxHeight - minHeight;
-        if (heightRange < 0.001f) heightRange = 1.0f;
+        // Use absolute height range based on settings, not per-chunk min/max
+        // This ensures consistent coloring across all chunks
+        float minHeight = settings.baseHeight;
+        float maxHeight = settings.baseHeight + settings.heightScale;
+        float heightRange = settings.heightScale;
         
         // Generate mesh with flat shading (same as TerrainGenerator)
         for (int z = 0; z < settings.depth; z++) {

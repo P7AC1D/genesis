@@ -53,7 +53,7 @@ namespace Genesis {
 
     private:
         // Internal generation helpers
-        std::shared_ptr<Mesh> GenerateWithWorldOffset(float offsetX, float offsetZ);
+        std::shared_ptr<Mesh> GenerateWithWorldOffset(float offsetX, float offsetZ, uint32_t worldSeed);
         void GenerateObjects(uint32_t worldSeed);
         float GetHeightAtLocal(float localX, float localZ) const;
 
