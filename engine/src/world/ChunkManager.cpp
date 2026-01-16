@@ -117,7 +117,8 @@ namespace Genesis {
         glm::ivec2 coord(chunkX, chunkZ);
         
         auto chunk = std::make_unique<Chunk>(chunkX, chunkZ, m_Settings.chunkSize, m_Settings.cellSize);
-        chunk->Generate(m_Settings.terrainSettings, m_Settings.seed);
+        float seaLevel = m_Settings.waterEnabled ? m_Settings.seaLevel : -1000.0f;
+        chunk->Generate(m_Settings.terrainSettings, m_Settings.seed, seaLevel);
         chunk->Upload(*m_Device);
         
         m_LoadedChunks[coord] = std::move(chunk);
@@ -147,11 +148,23 @@ namespace Genesis {
     }
 
     void ChunkManager::Render(Renderer& renderer) {
+        // First pass: render opaque terrain
         for (const auto& [coord, chunk] : m_LoadedChunks) {
             if (chunk->GetState() == ChunkState::Loaded && chunk->GetMesh()) {
                 glm::vec3 worldPos = chunk->GetWorldPosition();
                 glm::mat4 transform = glm::translate(glm::mat4(1.0f), worldPos);
                 renderer.Draw(*chunk->GetMesh(), transform);
+            }
+        }
+        
+        // Second pass: render transparent water (after opaque objects)
+        if (m_Settings.waterEnabled) {
+            for (const auto& [coord, chunk] : m_LoadedChunks) {
+                if (chunk->GetState() == ChunkState::Loaded && chunk->HasWater() && chunk->GetWaterMesh()) {
+                    glm::vec3 worldPos = chunk->GetWorldPosition();
+                    glm::mat4 transform = glm::translate(glm::mat4(1.0f), worldPos);
+                    renderer.DrawWater(*chunk->GetWaterMesh(), transform);
+                }
             }
         }
     }

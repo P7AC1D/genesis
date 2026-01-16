@@ -38,6 +38,7 @@ namespace Genesis {
         VkPipelineLayout GetLayout() const { return m_PipelineLayout; }
 
         static void DefaultPipelineConfig(PipelineConfig& config);
+        static void TransparentPipelineConfig(PipelineConfig& config);
 
     private:
         std::vector<char> ReadFile(const std::string& filepath);

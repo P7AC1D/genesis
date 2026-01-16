@@ -146,6 +146,26 @@ namespace Genesis {
         config.DynamicStateInfo.pDynamicStates = config.DynamicStates.data();
     }
 
+    void VulkanPipeline::TransparentPipelineConfig(PipelineConfig& config) {
+        // Start with default config
+        DefaultPipelineConfig(config);
+        
+        // Enable alpha blending
+        config.ColorBlendAttachment.blendEnable = VK_TRUE;
+        config.ColorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        config.ColorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        config.ColorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+        config.ColorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        config.ColorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        config.ColorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+        
+        // Still do depth test but don't write to depth buffer for transparency
+        config.DepthStencilState.depthWriteEnable = VK_FALSE;
+        
+        // Disable backface culling for water (visible from both sides)
+        config.RasterizationState.cullMode = VK_CULL_MODE_NONE;
+    }
+
     std::vector<char> VulkanPipeline::ReadFile(const std::string& filepath) {
         std::ifstream file(filepath, std::ios::ate | std::ios::binary);
 

@@ -47,6 +47,7 @@ namespace Genesis {
     void Sandbox::OnUpdate(float deltaTime) {
         m_FrameTime = deltaTime;
         m_FrameCount++;
+        m_TotalTime += deltaTime;  // Track total time for water animation
 
         // Simple WASD camera controller
         float velocity = m_CameraSpeed * deltaTime;
@@ -109,6 +110,9 @@ namespace Genesis {
 
         m_Camera.SetPosition(m_CameraPosition);
         m_Camera.SetRotation(m_CameraRotation);
+        
+        // Update renderer time for water animation
+        Application::Get().GetRenderer().SetTime(m_TotalTime);
 
         // Update chunk manager based on camera position
         m_ChunkManager.Update(m_CameraPosition);
@@ -173,12 +177,14 @@ namespace Genesis {
         m_TreeMesh = Mesh::CreateLowPolyTree(device);
         m_RockMesh = Mesh::CreateLowPolyRock(device);
 
-        // Initialize chunk-based world
+        // Initialize chunk-based world with water
         WorldSettings worldSettings;
         worldSettings.chunkSize = 32;
         worldSettings.cellSize = 1.0f;
         worldSettings.viewDistance = 3;
         worldSettings.seed = 42;
+        worldSettings.seaLevel = 2.0f;   // Water at height 2.0
+        worldSettings.waterEnabled = true;
         
         worldSettings.terrainSettings.heightScale = 8.0f;
         worldSettings.terrainSettings.noiseScale = 0.04f;

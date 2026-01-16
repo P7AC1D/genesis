@@ -49,6 +49,7 @@ namespace Genesis {
 
         // Debug info
         float m_FrameTime = 0.0f;
+        float m_TotalTime = 0.0f;
         int m_FrameCount = 0;
     };
 

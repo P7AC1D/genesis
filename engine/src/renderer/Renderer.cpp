@@ -36,6 +36,7 @@ namespace Genesis {
         CreateDescriptorSetLayout();
         CreatePipelineLayout();
         CreatePipeline();
+        CreateWaterPipeline();
         CreateUniformBuffers();
         CreateDescriptorPool();
         CreateDescriptorSets();
@@ -71,6 +72,7 @@ namespace Genesis {
         }
 
         // Cleanup pipeline
+        if (m_WaterPipeline) m_WaterPipeline->Shutdown();
         if (m_Pipeline) m_Pipeline->Shutdown();
 
         // Cleanup sync objects
@@ -168,6 +170,16 @@ namespace Genesis {
 
         m_Pipeline = std::make_unique<VulkanPipeline>();
         m_Pipeline->Init(*m_Device, "assets/shaders/lowpoly.vert.spv", "assets/shaders/lowpoly.frag.spv", config);
+    }
+
+    void Renderer::CreateWaterPipeline() {
+        PipelineConfig config{};
+        VulkanPipeline::TransparentPipelineConfig(config);
+        config.RenderPass = m_Swapchain->GetRenderPass();
+        config.PipelineLayout = m_PipelineLayout;
+
+        m_WaterPipeline = std::make_unique<VulkanPipeline>();
+        m_WaterPipeline->Init(*m_Device, "assets/shaders/water.vert.spv", "assets/shaders/water.frag.spv", config);
     }
 
     void Renderer::CreateUniformBuffers() {
@@ -354,7 +366,8 @@ namespace Genesis {
         // Update uniform buffer with camera matrices
         m_GlobalUBO.ViewMatrix = camera.GetViewMatrix();
         m_GlobalUBO.ProjectionMatrix = camera.GetProjectionMatrix();
-        m_GlobalUBO.CameraPosition = glm::vec4(camera.GetPosition(), 1.0f);
+        // Pack time into w component for water shader
+        m_GlobalUBO.CameraPosition = glm::vec4(camera.GetPosition(), m_Time);
         
         // Update lighting data from LightManager
         const auto& dirLight = m_LightManager.GetDirectionalLight();
@@ -408,6 +421,36 @@ namespace Genesis {
 
         m_Stats.DrawCalls++;
         m_Stats.TriangleCount += mesh.GetIndexCount() / 3;
+    }
+
+    void Renderer::DrawWater(const Mesh& mesh, const glm::mat4& transform) {
+        if (!m_FrameStarted || !m_WaterSettings.enabled) return;
+
+        VkCommandBuffer cmd = m_CommandBuffers[m_CurrentFrameIndex];
+        
+        // Switch to water pipeline
+        m_WaterPipeline->Bind(cmd);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1,
+                                &m_DescriptorSets[m_CurrentFrameIndex], 0, nullptr);
+
+        // Push model matrix
+        PushConstantData push{};
+        push.ModelMatrix = transform;
+        push.NormalMatrix = glm::transpose(glm::inverse(transform));
+
+        vkCmdPushConstants(cmd, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantData), &push);
+
+        // Bind and draw mesh
+        mesh.Bind(cmd);
+        mesh.Draw(cmd);
+
+        m_Stats.DrawCalls++;
+        m_Stats.TriangleCount += mesh.GetIndexCount() / 3;
+        
+        // Switch back to opaque pipeline for any subsequent draws
+        m_Pipeline->Bind(cmd);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1,
+                                &m_DescriptorSets[m_CurrentFrameIndex], 0, nullptr);
     }
 
     void Renderer::RenderScene(Scene& scene) {

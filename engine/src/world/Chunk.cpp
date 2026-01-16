@@ -1,5 +1,6 @@
 #include "genesis/world/Chunk.h"
 #include "genesis/renderer/VulkanDevice.h"
+#include "genesis/procedural/Water.h"
 #include <random>
 
 namespace Genesis {
@@ -26,7 +27,7 @@ namespace Genesis {
                worldZ >= origin.z && worldZ < origin.z + chunkWorldSize;
     }
 
-    void Chunk::Generate(const TerrainSettings& baseSettings, uint32_t worldSeed) {
+    void Chunk::Generate(const TerrainSettings& baseSettings, uint32_t worldSeed, float seaLevel) {
         // Create chunk-specific terrain settings
         TerrainSettings settings = baseSettings;
         settings.width = m_Size;
@@ -48,8 +49,11 @@ namespace Genesis {
             m_Mesh = std::make_unique<Mesh>(terrainMesh->GetVertices(), terrainMesh->GetIndices());
         }
         
+        // Generate water plane if sea level is specified
+        GenerateWater(seaLevel);
+        
         // Generate object positions (uses chunk-specific seed derived from world seed)
-        GenerateObjects(worldSeed);
+        GenerateObjects(worldSeed, seaLevel);
         
         m_State = ChunkState::Loading;
     }
@@ -151,7 +155,7 @@ namespace Genesis {
         return std::make_shared<Mesh>(vertices, indices);
     }
 
-    void Chunk::GenerateObjects(uint32_t worldSeed) {
+    void Chunk::GenerateObjects(uint32_t worldSeed, float seaLevel) {
         const auto& settings = m_TerrainGenerator.GetSettings();
         glm::vec3 worldPos = GetWorldPosition();
         float chunkWorldSize = m_Size * m_CellSize;
@@ -171,13 +175,16 @@ namespace Genesis {
             float localZ = distPos(rng);
             float height = GetHeightAtLocal(localX, localZ);
             
-            float normalizedHeight = height / settings.heightScale;
-            if (normalizedHeight > settings.sandLevel && normalizedHeight < settings.rockLevel) {
-                m_TreePositions.push_back(glm::vec3(
-                    worldPos.x + localX,
-                    height,
-                    worldPos.z + localZ
-                ));
+            // Don't place trees below sea level or in water
+            if (height > seaLevel + 0.5f) {
+                float normalizedHeight = height / settings.heightScale;
+                if (normalizedHeight > settings.sandLevel && normalizedHeight < settings.rockLevel) {
+                    m_TreePositions.push_back(glm::vec3(
+                        worldPos.x + localX,
+                        height,
+                        worldPos.z + localZ
+                    ));
+                }
             }
         }
         
@@ -190,14 +197,37 @@ namespace Genesis {
             float localZ = distPos(rng);
             float height = GetHeightAtLocal(localX, localZ);
             
-            float normalizedHeight = height / settings.heightScale;
-            if (normalizedHeight > settings.waterLevel * 0.5f) {
-                m_RockPositions.push_back(glm::vec3(
-                    worldPos.x + localX,
-                    height + 0.1f,
-                    worldPos.z + localZ
-                ));
+            // Rocks can be near water but not fully submerged
+            if (height > seaLevel - 0.3f) {
+                float normalizedHeight = height / settings.heightScale;
+                if (normalizedHeight > settings.waterLevel * 0.5f) {
+                    m_RockPositions.push_back(glm::vec3(
+                        worldPos.x + localX,
+                        height + 0.1f,
+                        worldPos.z + localZ
+                    ));
+                }
             }
+        }
+    }
+    
+    void Chunk::GenerateWater(float seaLevel) {
+        float chunkWorldSize = m_Size * m_CellSize;
+        glm::vec3 worldPos = GetWorldPosition();
+        
+        // Generate water plane mesh (in local coordinates)
+        auto waterMesh = WaterGenerator::GeneratePlane(
+            chunkWorldSize * 0.5f,  // center at chunk center (local coords)
+            chunkWorldSize * 0.5f,
+            chunkWorldSize,
+            chunkWorldSize,
+            8,  // subdivisions
+            seaLevel
+        );
+        
+        if (waterMesh) {
+            m_WaterMesh = std::make_unique<Mesh>(waterMesh->GetVertices(), waterMesh->GetIndices());
+            m_HasWater = true;
         }
     }
 
@@ -226,17 +256,30 @@ namespace Genesis {
 
     void Chunk::Upload(VulkanDevice& device) {
         if (m_Mesh && m_State == ChunkState::Loading) {
-            // Create GPU buffers
+            // Create GPU buffers for terrain
             auto cpuMesh = std::move(m_Mesh);
             m_Mesh = std::make_unique<Mesh>(device, cpuMesh->GetVertices(), cpuMesh->GetIndices());
+            
+            // Create GPU buffers for water
+            if (m_WaterMesh && m_HasWater) {
+                auto cpuWater = std::move(m_WaterMesh);
+                m_WaterMesh = std::make_unique<Mesh>(device, cpuWater->GetVertices(), cpuWater->GetIndices());
+            }
+            
             m_State = ChunkState::Loaded;
         }
     }
 
     void Chunk::Unload() {
-        if (m_Mesh && m_State == ChunkState::Loaded) {
-            m_Mesh->Shutdown();
-            m_Mesh.reset();
+        if (m_State == ChunkState::Loaded) {
+            if (m_Mesh) {
+                m_Mesh->Shutdown();
+                m_Mesh.reset();
+            }
+            if (m_WaterMesh) {
+                m_WaterMesh->Shutdown();
+                m_WaterMesh.reset();
+            }
             m_State = ChunkState::Unloaded;
         }
     }
@@ -247,6 +290,12 @@ namespace Genesis {
                 m_Mesh->Shutdown();
             }
             m_Mesh.reset();
+        }
+        if (m_WaterMesh) {
+            if (m_State == ChunkState::Loaded) {
+                m_WaterMesh->Shutdown();
+            }
+            m_WaterMesh.reset();
         }
         m_TreePositions.clear();
         m_RockPositions.clear();

@@ -21,6 +21,10 @@ namespace Genesis {
         // World seed
         uint32_t seed = 12345;
         
+        // Water settings
+        float seaLevel = 2.0f;        // Height of water surface
+        bool waterEnabled = true;
+        
         // Terrain settings (applied to all chunks)
         TerrainSettings terrainSettings;
     };

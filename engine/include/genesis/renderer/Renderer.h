@@ -1,6 +1,7 @@
 #pragma once
 
 #include "genesis/renderer/Light.h"
+#include "genesis/procedural/Water.h"
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 #include <memory>
@@ -73,6 +74,7 @@ namespace Genesis {
         void EndScene();
 
         void Draw(const Mesh& mesh, const glm::mat4& transform);
+        void DrawWater(const Mesh& mesh, const glm::mat4& transform);
         void RenderScene(Scene& scene);
 
         void OnWindowResize(uint32_t width, uint32_t height);
@@ -84,6 +86,12 @@ namespace Genesis {
         // Lighting
         LightManager& GetLightManager() { return m_LightManager; }
         const LightManager& GetLightManager() const { return m_LightManager; }
+        
+        // Water
+        WaterSettings& GetWaterSettings() { return m_WaterSettings; }
+        const WaterSettings& GetWaterSettings() const { return m_WaterSettings; }
+        void SetTime(float time) { m_Time = time; }
+        float GetTime() const { return m_Time; }
 
         const RenderStats& GetStats() const { return m_Stats; }
         void ResetStats();
@@ -96,6 +104,7 @@ namespace Genesis {
         void CreateDescriptorSetLayout();
         void CreatePipelineLayout();
         void CreatePipeline();
+        void CreateWaterPipeline();
         void CreateUniformBuffers();
         void CreateDescriptorPool();
         void CreateDescriptorSets();
@@ -107,6 +116,7 @@ namespace Genesis {
         std::unique_ptr<VulkanDevice> m_Device;
         std::unique_ptr<VulkanSwapchain> m_Swapchain;
         std::unique_ptr<VulkanPipeline> m_Pipeline;
+        std::unique_ptr<VulkanPipeline> m_WaterPipeline;
 
         // Command buffers
         std::vector<VkCommandBuffer> m_CommandBuffers;
@@ -135,9 +145,13 @@ namespace Genesis {
 
         // Current scene data
         GlobalUBO m_GlobalUBO;
+        float m_Time = 0.0f;
         
         // Lighting
         LightManager m_LightManager;
+        
+        // Water
+        WaterSettings m_WaterSettings;
 
         RenderStats m_Stats;
     };

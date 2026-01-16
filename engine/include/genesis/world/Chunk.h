@@ -22,7 +22,7 @@ namespace Genesis {
         ~Chunk();
 
         // Generate terrain for this chunk
-        void Generate(const TerrainSettings& baseSettings, uint32_t worldSeed);
+        void Generate(const TerrainSettings& baseSettings, uint32_t worldSeed, float seaLevel = 0.0f);
         
         // Upload mesh to GPU
         void Upload(VulkanDevice& device);
@@ -40,6 +40,8 @@ namespace Genesis {
         glm::vec3 GetWorldPosition() const;
         ChunkState GetState() const { return m_State; }
         Mesh* GetMesh() const { return m_Mesh.get(); }
+        Mesh* GetWaterMesh() const { return m_WaterMesh.get(); }
+        bool HasWater() const { return m_HasWater; }
         
         // Get height at local position within chunk
         float GetHeightAt(float localX, float localZ) const;
@@ -54,7 +56,8 @@ namespace Genesis {
     private:
         // Internal generation helpers
         std::shared_ptr<Mesh> GenerateWithWorldOffset(float offsetX, float offsetZ, uint32_t worldSeed);
-        void GenerateObjects(uint32_t worldSeed);
+        void GenerateObjects(uint32_t worldSeed, float seaLevel);
+        void GenerateWater(float seaLevel);
         float GetHeightAtLocal(float localX, float localZ) const;
 
         int m_ChunkX;  // Chunk coordinate (not world position)
@@ -65,6 +68,8 @@ namespace Genesis {
         ChunkState m_State = ChunkState::Unloaded;
         
         std::unique_ptr<Mesh> m_Mesh;
+        std::unique_ptr<Mesh> m_WaterMesh;
+        bool m_HasWater = false;
         TerrainGenerator m_TerrainGenerator;
         
         // Object positions within this chunk (world coordinates)
