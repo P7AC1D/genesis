@@ -142,10 +142,10 @@ namespace Genesis
 
         auto chunk = std::make_unique<Chunk>(chunkX, chunkZ, m_Settings.chunkSize, m_Settings.cellSize);
         float seaLevel = m_Settings.waterEnabled ? m_Settings.seaLevel : -1000.0f;
-        
-        GEN_DEBUG("LoadChunk - using heightScale: {}, noiseScale: {}", 
+
+        GEN_DEBUG("LoadChunk - using heightScale: {}, noiseScale: {}",
                   m_Settings.terrainSettings.heightScale, m_Settings.terrainSettings.noiseScale);
-        
+
         chunk->Generate(m_Settings.terrainSettings, m_Settings.seed, seaLevel);
         chunk->Upload(*m_Device);
 
@@ -245,8 +245,8 @@ namespace Genesis
     {
         // Defer regeneration to next Update() call to avoid Vulkan sync issues
         GEN_INFO("RegenerateAllChunks: scheduling deferred regeneration");
-        GEN_INFO("New settings: heightScale={}, noiseScale={}, octaves={}", 
-                 m_Settings.terrainSettings.heightScale, 
+        GEN_INFO("New settings: heightScale={}, noiseScale={}, octaves={}",
+                 m_Settings.terrainSettings.heightScale,
                  m_Settings.terrainSettings.noiseScale,
                  m_Settings.terrainSettings.octaves);
         m_NeedsRegeneration = true;
@@ -265,19 +265,19 @@ namespace Genesis
         m_Device->WaitIdle();
 
         std::vector<glm::ivec2> chunksToRegenerate;
-        for (const auto& [coord, chunk] : m_LoadedChunks)
+        for (const auto &[coord, chunk] : m_LoadedChunks)
         {
             chunksToRegenerate.push_back(coord);
         }
 
         GEN_INFO("Unloading {} chunks...", chunksToRegenerate.size());
-        for (const auto& coord : chunksToRegenerate)
+        for (const auto &coord : chunksToRegenerate)
         {
             UnloadChunk(coord.x, coord.y);
         }
 
         GEN_INFO("Reloading {} chunks...", chunksToRegenerate.size());
-        for (const auto& coord : chunksToRegenerate)
+        for (const auto &coord : chunksToRegenerate)
         {
             LoadChunk(coord.x, coord.y);
         }
@@ -286,7 +286,7 @@ namespace Genesis
         GEN_INFO("Regenerated {} chunks with updated settings", chunksToRegenerate.size());
     }
 
-    void ChunkManager::UpdateTerrainSettings(const TerrainSettings& settings)
+    void ChunkManager::UpdateTerrainSettings(const TerrainSettings &settings)
     {
         m_Settings.terrainSettings = settings;
         RegenerateAllChunks();

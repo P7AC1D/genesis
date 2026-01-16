@@ -13,7 +13,8 @@
 
 #include <GLFW/glfw3.h>
 
-namespace Genesis {
+namespace Genesis
+{
 
     ImGuiLayer::ImGuiLayer()
         : Layer("ImGuiLayer")
@@ -27,20 +28,20 @@ namespace Genesis {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
 
-        ImGuiIO& io = ImGui::GetIO();
+        ImGuiIO &io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
         SetupImGuiStyle();
 
-        auto& app = Application::Get();
-        auto& renderer = app.GetRenderer();
-        auto& device = renderer.GetDevice();
-        auto& context = renderer.GetContext();
-        auto& swapchain = renderer.GetSwapchain();
+        auto &app = Application::Get();
+        auto &renderer = app.GetRenderer();
+        auto &device = renderer.GetDevice();
+        auto &context = renderer.GetContext();
+        auto &swapchain = renderer.GetSwapchain();
 
         CreateDescriptorPool();
 
-        GLFWwindow* window = app.GetWindow().GetNativeWindow();
+        GLFWwindow *window = app.GetWindow().GetNativeWindow();
         ImGui_ImplGlfw_InitForVulkan(window, true);
 
         ImGui_ImplVulkan_InitInfo initInfo{};
@@ -70,7 +71,7 @@ namespace Genesis {
 
     void ImGuiLayer::OnDetach()
     {
-        auto& device = Application::Get().GetRenderer().GetDevice();
+        auto &device = Application::Get().GetRenderer().GetDevice();
         device.WaitIdle();
 
         ImGui_ImplVulkan_Shutdown();
@@ -86,11 +87,11 @@ namespace Genesis {
         GEN_INFO("ImGui layer detached");
     }
 
-    void ImGuiLayer::OnEvent(Event& event)
+    void ImGuiLayer::OnEvent(Event &event)
     {
         if (m_BlockEvents)
         {
-            ImGuiIO& io = ImGui::GetIO();
+            ImGuiIO &io = ImGui::GetIO();
             // Block events if ImGui wants them
             // event.Handled |= io.WantCaptureMouse || io.WantCaptureKeyboard;
         }
@@ -107,24 +108,23 @@ namespace Genesis {
     {
         ImGui::Render();
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(),
-            Application::Get().GetRenderer().GetCurrentCommandBuffer());
+                                        Application::Get().GetRenderer().GetCurrentCommandBuffer());
     }
 
     void ImGuiLayer::CreateDescriptorPool()
     {
         VkDescriptorPoolSize poolSizes[] = {
-            { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
-            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
-            { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
-            { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
-            { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
-            { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
-            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
-            { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
-            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
-            { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
-            { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
-        };
+            {VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+            {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
+            {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
+            {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000}};
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -133,7 +133,7 @@ namespace Genesis {
         poolInfo.poolSizeCount = static_cast<uint32_t>(std::size(poolSizes));
         poolInfo.pPoolSizes = poolSizes;
 
-        auto& device = Application::Get().GetRenderer().GetDevice();
+        auto &device = Application::Get().GetRenderer().GetDevice();
         if (vkCreateDescriptorPool(device.GetDevice(), &poolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
         {
             GEN_ERROR("Failed to create ImGui descriptor pool!");
@@ -144,7 +144,7 @@ namespace Genesis {
     {
         ImGui::StyleColorsDark();
 
-        ImGuiStyle& style = ImGui::GetStyle();
+        ImGuiStyle &style = ImGui::GetStyle();
         style.WindowRounding = 4.0f;
         style.FrameRounding = 2.0f;
         style.GrabRounding = 2.0f;
@@ -153,7 +153,7 @@ namespace Genesis {
         style.ItemSpacing = ImVec2(8.0f, 6.0f);
         style.WindowPadding = ImVec2(10.0f, 10.0f);
 
-        ImVec4* colors = style.Colors;
+        ImVec4 *colors = style.Colors;
         colors[ImGuiCol_WindowBg] = ImVec4(0.10f, 0.10f, 0.12f, 0.94f);
         colors[ImGuiCol_Header] = ImVec4(0.20f, 0.25f, 0.30f, 0.80f);
         colors[ImGuiCol_HeaderHovered] = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);

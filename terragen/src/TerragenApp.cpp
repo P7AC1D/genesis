@@ -1,17 +1,20 @@
 #include "TerragenApp.h"
 #include "Sandbox.h"
 
-namespace Genesis {
+namespace Genesis
+{
 
-    TerragenApp::TerragenApp(const ApplicationConfig& config)
-        : Application(config) {
+    TerragenApp::TerragenApp(const ApplicationConfig &config)
+        : Application(config)
+    {
     }
 
     TerragenApp::~TerragenApp() = default;
 
-    void TerragenApp::OnInit() {
+    void TerragenApp::OnInit()
+    {
         GEN_INFO("Terragen initializing...");
-        
+
         // Push ImGui layer as overlay
         m_ImGuiLayer = new ImGuiLayer();
         PushOverlay(m_ImGuiLayer);
@@ -20,16 +23,19 @@ namespace Genesis {
         PushLayer(m_Sandbox);
     }
 
-    void TerragenApp::OnShutdown() {
+    void TerragenApp::OnShutdown()
+    {
         GEN_INFO("Terragen shutting down...");
     }
 
-    void TerragenApp::OnUpdate(float deltaTime) {
+    void TerragenApp::OnUpdate(float deltaTime)
+    {
         // Terragen-specific updates
     }
 
     // Application factory
-    Application* CreateApplication(int argc, char** argv) {
+    Application *CreateApplication(int argc, char **argv)
+    {
         ApplicationConfig config;
         config.Name = "Terragen";
         config.Window.Title = "Terragen";

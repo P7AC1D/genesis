@@ -8,54 +8,66 @@
 #include <GLFW/glfw3.h>
 #include <chrono>
 
-namespace Genesis {
+namespace Genesis
+{
 
-    Application* Application::s_Instance = nullptr;
+    Application *Application::s_Instance = nullptr;
 
     // LayerStack implementation
-    class LayerStack {
+    class LayerStack
+    {
     public:
         LayerStack() = default;
-        ~LayerStack() {
-            for (Layer* layer : m_Layers) {
+        ~LayerStack()
+        {
+            for (Layer *layer : m_Layers)
+            {
                 layer->OnDetach();
                 delete layer;
             }
         }
 
-        void PushLayer(Layer* layer) {
+        void PushLayer(Layer *layer)
+        {
             m_Layers.emplace(m_Layers.begin() + m_LayerInsertIndex, layer);
             m_LayerInsertIndex++;
             layer->OnAttach();
         }
 
-        void PushOverlay(Layer* overlay) {
+        void PushOverlay(Layer *overlay)
+        {
             m_Layers.emplace_back(overlay);
             overlay->OnAttach();
         }
 
-        void PopLayer(Layer* layer) {
+        void PopLayer(Layer *layer)
+        {
             auto it = std::find(m_Layers.begin(), m_Layers.begin() + m_LayerInsertIndex, layer);
-            if (it != m_Layers.begin() + m_LayerInsertIndex) {
+            if (it != m_Layers.begin() + m_LayerInsertIndex)
+            {
                 layer->OnDetach();
                 m_Layers.erase(it);
                 m_LayerInsertIndex--;
             }
         }
 
-        void PopOverlay(Layer* overlay) {
+        void PopOverlay(Layer *overlay)
+        {
             auto it = std::find(m_Layers.begin() + m_LayerInsertIndex, m_Layers.end(), overlay);
-            if (it != m_Layers.end()) {
+            if (it != m_Layers.end())
+            {
                 overlay->OnDetach();
                 m_Layers.erase(it);
             }
         }
 
-        std::vector<Layer*>::iterator begin() { return m_Layers.begin(); }
-        std::vector<Layer*>::iterator end() { return m_Layers.end(); }
+        std::vector<Layer *>::iterator begin() { return m_Layers.begin(); }
+        std::vector<Layer *>::iterator end() { return m_Layers.end(); }
 
-        Layer* FindImGuiLayer() {
-            for (Layer* layer : m_Layers) {
+        Layer *FindImGuiLayer()
+        {
+            for (Layer *layer : m_Layers)
+            {
                 if (layer->GetName() == "ImGuiLayer")
                     return layer;
             }
@@ -63,12 +75,13 @@ namespace Genesis {
         }
 
     private:
-        std::vector<Layer*> m_Layers;
+        std::vector<Layer *> m_Layers;
         unsigned int m_LayerInsertIndex = 0;
     };
 
-    Application::Application(const ApplicationConfig& config)
-        : m_Config(config) {
+    Application::Application(const ApplicationConfig &config)
+        : m_Config(config)
+    {
         GEN_ASSERT(!s_Instance, "Application already exists!");
         s_Instance = this;
 
@@ -83,27 +96,30 @@ namespace Genesis {
         GEN_INFO("Genesis Engine initialized successfully!");
     }
 
-    Application::~Application() {
+    Application::~Application()
+    {
         OnShutdown();
-        
+
         // Destroy layers first (they may hold GPU resources)
         m_LayerStack.reset();
-        
+
         // Then shutdown renderer
         m_Renderer->Shutdown();
         m_Renderer.reset();
-        
+
         m_Window.reset();
         Log::Shutdown();
         s_Instance = nullptr;
     }
 
-    void Application::Run() {
+    void Application::Run()
+    {
         OnInit();
 
         auto lastTime = std::chrono::high_resolution_clock::now();
 
-        while (m_Running && !m_Window->ShouldClose()) {
+        while (m_Running && !m_Window->ShouldClose())
+        {
             auto currentTime = std::chrono::high_resolution_clock::now();
             float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
             lastTime = currentTime;
@@ -111,24 +127,29 @@ namespace Genesis {
             ProcessEvents();
 
             // Update layers
-            for (Layer* layer : *m_LayerStack) {
+            for (Layer *layer : *m_LayerStack)
+            {
                 layer->OnUpdate(deltaTime);
             }
 
             OnUpdate(deltaTime);
 
             // Render - only if BeginFrame succeeds (swapchain might be recreating)
-            if (m_Renderer->BeginFrame()) {
-                for (Layer* layer : *m_LayerStack) {
+            if (m_Renderer->BeginFrame())
+            {
+                for (Layer *layer : *m_LayerStack)
+                {
                     layer->OnRender();
                 }
 
                 // ImGui rendering
-                Layer* imguiLayerBase = m_LayerStack->FindImGuiLayer();
-                if (imguiLayerBase) {
-                    ImGuiLayer* imguiLayer = static_cast<ImGuiLayer*>(imguiLayerBase);
+                Layer *imguiLayerBase = m_LayerStack->FindImGuiLayer();
+                if (imguiLayerBase)
+                {
+                    ImGuiLayer *imguiLayer = static_cast<ImGuiLayer *>(imguiLayerBase);
                     imguiLayer->Begin();
-                    for (Layer* layer : *m_LayerStack) {
+                    for (Layer *layer : *m_LayerStack)
+                    {
                         layer->OnImGuiRender();
                     }
                     imguiLayer->End();
@@ -139,19 +160,23 @@ namespace Genesis {
         }
     }
 
-    void Application::Close() {
+    void Application::Close()
+    {
         m_Running = false;
     }
 
-    void Application::PushLayer(Layer* layer) {
+    void Application::PushLayer(Layer *layer)
+    {
         m_LayerStack->PushLayer(layer);
     }
 
-    void Application::PushOverlay(Layer* overlay) {
+    void Application::PushOverlay(Layer *overlay)
+    {
         m_LayerStack->PushOverlay(overlay);
     }
 
-    void Application::ProcessEvents() {
+    void Application::ProcessEvents()
+    {
         m_Window->PollEvents();
     }
 

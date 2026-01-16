@@ -235,7 +235,7 @@ namespace Genesis
         ImGui::Separator();
         ImGui::Text("Camera Position:");
         ImGui::Text("  X: %.1f  Y: %.1f  Z: %.1f",
-            m_CameraPosition.x, m_CameraPosition.y, m_CameraPosition.z);
+                    m_CameraPosition.x, m_CameraPosition.y, m_CameraPosition.z);
 
         ImGui::Separator();
         ImGui::SliderFloat("Time of Day", &m_TimeOfDay, 0.0f, 24.0f, "%.1f h");
@@ -273,9 +273,9 @@ namespace Genesis
 
         // Initialize chunk-based world
         WorldSettings worldSettings;
-        worldSettings.chunkSize = 32;       // Grid cells per chunk
-        worldSettings.cellSize = 1.0f;      // World units per cell
-        worldSettings.viewDistance = 3;     // Load 7x7 chunks
+        worldSettings.chunkSize = 32;   // Grid cells per chunk
+        worldSettings.cellSize = 1.0f;  // World units per cell
+        worldSettings.viewDistance = 3; // Load 7x7 chunks
         worldSettings.seed = 42;
         worldSettings.seaLevel = 2.0f;
         worldSettings.waterEnabled = true;
@@ -288,7 +288,7 @@ namespace Genesis
         worldSettings.terrainSettings.lacunarity = 2.0f;
         worldSettings.terrainSettings.flatShading = true;
         worldSettings.terrainSettings.useHeightColors = true;
-        
+
         // Domain warping for organic terrain
         worldSettings.terrainSettings.useWarp = true;
         worldSettings.terrainSettings.warpStrength = 0.4f;

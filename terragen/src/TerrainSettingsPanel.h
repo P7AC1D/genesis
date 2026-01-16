@@ -5,16 +5,18 @@
 #include "genesis/world/ChunkManager.h"
 #include <memory>
 
-namespace Genesis {
+namespace Genesis
+{
 
     class VulkanDevice;
 
-    class TerrainSettingsPanel {
+    class TerrainSettingsPanel
+    {
     public:
         TerrainSettingsPanel();
         ~TerrainSettingsPanel();
 
-        void Initialize(VulkanDevice& device, ChunkManager& chunkManager);
+        void Initialize(VulkanDevice &device, ChunkManager &chunkManager);
         void Shutdown();
         void Render();
 
@@ -32,8 +34,8 @@ namespace Genesis {
         void ApplySettings();
 
     private:
-        VulkanDevice* m_Device = nullptr;
-        ChunkManager* m_ChunkManager = nullptr;
+        VulkanDevice *m_Device = nullptr;
+        ChunkManager *m_ChunkManager = nullptr;
 
         TerrainSettings m_TerrainSettings;
         float m_SeaLevel = 2.0f;

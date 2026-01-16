@@ -9,14 +9,15 @@
 #include <algorithm>
 #include <cmath>
 
-namespace Genesis {
+namespace Genesis
+{
 
     HeightmapTexture::~HeightmapTexture()
     {
         Destroy();
     }
 
-    void HeightmapTexture::Create(VulkanDevice& device, int width, int height)
+    void HeightmapTexture::Create(VulkanDevice &device, int width, int height)
     {
         m_Device = &device;
         m_Width = width;
@@ -77,7 +78,7 @@ namespace Genesis {
         m_Device = nullptr;
     }
 
-    void HeightmapTexture::CreateImage(VulkanDevice& device)
+    void HeightmapTexture::CreateImage(VulkanDevice &device)
     {
         VkDevice vkDevice = device.GetDevice();
 
@@ -109,7 +110,7 @@ namespace Genesis {
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize = memRequirements.size;
         allocInfo.memoryTypeIndex = FindMemoryType(device, memRequirements.memoryTypeBits,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+                                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
         if (vkAllocateMemory(vkDevice, &allocInfo, nullptr, &m_ImageMemory) != VK_SUCCESS)
         {
@@ -157,7 +158,7 @@ namespace Genesis {
         stagingAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         stagingAllocInfo.allocationSize = stagingMemReq.size;
         stagingAllocInfo.memoryTypeIndex = FindMemoryType(device, stagingMemReq.memoryTypeBits,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+                                                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
         if (vkAllocateMemory(vkDevice, &stagingAllocInfo, nullptr, &m_StagingMemory) != VK_SUCCESS)
         {
@@ -168,7 +169,7 @@ namespace Genesis {
         vkBindBufferMemory(vkDevice, m_StagingBuffer, m_StagingMemory, 0);
     }
 
-    void HeightmapTexture::CreateSampler(VulkanDevice& device)
+    void HeightmapTexture::CreateSampler(VulkanDevice &device)
     {
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -194,13 +195,13 @@ namespace Genesis {
         }
     }
 
-    void HeightmapTexture::CreateDescriptorSet(VulkanDevice& device)
+    void HeightmapTexture::CreateDescriptorSet(VulkanDevice &device)
     {
         m_DescriptorSet = ImGui_ImplVulkan_AddTexture(m_Sampler, m_ImageView,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
 
-    void HeightmapTexture::Update(const std::vector<float>& heightData, float minHeight, float maxHeight)
+    void HeightmapTexture::Update(const std::vector<float> &heightData, float minHeight, float maxHeight)
     {
         if (!m_Device || m_Image == VK_NULL_HANDLE)
             return;
@@ -210,7 +211,8 @@ namespace Genesis {
         std::vector<uint8_t> pixels(m_Width * m_Height * 4);
 
         float range = maxHeight - minHeight;
-        if (range < 0.001f) range = 1.0f;
+        if (range < 0.001f)
+            range = 1.0f;
 
         for (int y = 0; y < m_Height; y++)
         {
@@ -231,7 +233,7 @@ namespace Genesis {
             }
         }
 
-        void* data;
+        void *data;
         vkMapMemory(device, m_StagingMemory, 0, pixels.size(), 0, &data);
         memcpy(data, pixels.data(), pixels.size());
         vkUnmapMemory(device, m_StagingMemory);
@@ -254,8 +256,8 @@ namespace Genesis {
         barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 
         vkCmdPipelineBarrier(commandBuffer,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0, 0, nullptr, 0, nullptr, 1, &barrier);
+                             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &barrier);
 
         VkBufferImageCopy region{};
         region.bufferOffset = 0;
@@ -269,7 +271,7 @@ namespace Genesis {
         region.imageExtent = {static_cast<uint32_t>(m_Width), static_cast<uint32_t>(m_Height), 1};
 
         vkCmdCopyBufferToImage(commandBuffer, m_StagingBuffer, m_Image,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
         barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -277,13 +279,13 @@ namespace Genesis {
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
         vkCmdPipelineBarrier(commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            0, 0, nullptr, 0, nullptr, 1, &barrier);
+                             VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &barrier);
 
         m_Device->EndSingleTimeCommands(commandBuffer);
     }
 
-    uint32_t HeightmapTexture::FindMemoryType(VulkanDevice& device, uint32_t typeFilter, VkMemoryPropertyFlags properties)
+    uint32_t HeightmapTexture::FindMemoryType(VulkanDevice &device, uint32_t typeFilter, VkMemoryPropertyFlags properties)
     {
         VkPhysicalDeviceMemoryProperties memProperties;
         vkGetPhysicalDeviceMemoryProperties(device.GetPhysicalDevice(), &memProperties);

@@ -7,17 +7,18 @@
 #include <algorithm>
 #include <cmath>
 
-namespace Genesis {
+namespace Genesis
+{
 
     TerrainSettingsPanel::TerrainSettingsPanel() = default;
     TerrainSettingsPanel::~TerrainSettingsPanel() = default;
 
-    void TerrainSettingsPanel::Initialize(VulkanDevice& device, ChunkManager& chunkManager)
+    void TerrainSettingsPanel::Initialize(VulkanDevice &device, ChunkManager &chunkManager)
     {
         m_Device = &device;
         m_ChunkManager = &chunkManager;
 
-        const auto& worldSettings = chunkManager.GetSettings();
+        const auto &worldSettings = chunkManager.GetSettings();
         m_TerrainSettings = worldSettings.terrainSettings;
         m_SeaLevel = worldSettings.seaLevel;
         m_WaterEnabled = worldSettings.waterEnabled;
@@ -86,7 +87,7 @@ namespace Genesis {
 
                 ImGui::SetCursorPosX((ImGui::GetWindowWidth() - previewSize) * 0.5f);
                 ImGui::Image(reinterpret_cast<ImTextureID>(m_HeightmapTexture->GetDescriptorSet()),
-                    ImVec2(previewSize, previewSize));
+                             ImVec2(previewSize, previewSize));
 
                 if (ImGui::Button("Refresh Preview", ImVec2(-1, 0)))
                 {
@@ -267,19 +268,19 @@ namespace Genesis {
                 if (m_TerrainSettings.useWarp)
                 {
                     height = noise.MultiWarpedFBM(sampleX, sampleY,
-                        m_TerrainSettings.octaves,
-                        m_TerrainSettings.persistence,
-                        m_TerrainSettings.lacunarity,
-                        m_TerrainSettings.warpStrength,
-                        m_TerrainSettings.warpScale,
-                        m_TerrainSettings.warpLevels);
+                                                  m_TerrainSettings.octaves,
+                                                  m_TerrainSettings.persistence,
+                                                  m_TerrainSettings.lacunarity,
+                                                  m_TerrainSettings.warpStrength,
+                                                  m_TerrainSettings.warpScale,
+                                                  m_TerrainSettings.warpLevels);
                 }
                 else
                 {
                     height = noise.FBM(sampleX, sampleY,
-                        m_TerrainSettings.octaves,
-                        m_TerrainSettings.persistence,
-                        m_TerrainSettings.lacunarity);
+                                       m_TerrainSettings.octaves,
+                                       m_TerrainSettings.persistence,
+                                       m_TerrainSettings.lacunarity);
                 }
 
                 height = (height + 1.0f) * 0.5f;
@@ -308,7 +309,7 @@ namespace Genesis {
         GEN_INFO("  Octaves: {} -> {}", m_ChunkManager->GetSettings().terrainSettings.octaves, m_TerrainSettings.octaves);
         GEN_INFO("  Sea Level: {} -> {}", m_ChunkManager->GetSettings().seaLevel, m_SeaLevel);
 
-        auto& worldSettings = m_ChunkManager->GetSettings();
+        auto &worldSettings = m_ChunkManager->GetSettings();
         worldSettings.terrainSettings = m_TerrainSettings;
         worldSettings.seaLevel = m_SeaLevel;
         worldSettings.waterEnabled = m_WaterEnabled;

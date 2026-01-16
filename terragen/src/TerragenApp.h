@@ -2,14 +2,16 @@
 
 #include <genesis/Genesis.h>
 
-namespace Genesis {
+namespace Genesis
+{
 
     class Sandbox;
     class ImGuiLayer;
 
-    class TerragenApp : public Application {
+    class TerragenApp : public Application
+    {
     public:
-        TerragenApp(const ApplicationConfig& config);
+        TerragenApp(const ApplicationConfig &config);
         ~TerragenApp() override;
 
     protected:
@@ -18,8 +20,8 @@ namespace Genesis {
         void OnUpdate(float deltaTime) override;
 
     private:
-        Sandbox* m_Sandbox = nullptr;
-        ImGuiLayer* m_ImGuiLayer = nullptr;
+        Sandbox *m_Sandbox = nullptr;
+        ImGuiLayer *m_ImGuiLayer = nullptr;
     };
 
 }

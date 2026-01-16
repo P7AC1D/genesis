@@ -3,18 +3,20 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 
-namespace Genesis {
+namespace Genesis
+{
 
     class VulkanDevice;
 
-    class HeightmapTexture {
+    class HeightmapTexture
+    {
     public:
         HeightmapTexture() = default;
         ~HeightmapTexture();
 
-        void Create(VulkanDevice& device, int width, int height);
+        void Create(VulkanDevice &device, int width, int height);
         void Destroy();
-        void Update(const std::vector<float>& heightData, float minHeight, float maxHeight);
+        void Update(const std::vector<float> &heightData, float minHeight, float maxHeight);
 
         VkDescriptorSet GetDescriptorSet() const { return m_DescriptorSet; }
         int GetWidth() const { return m_Width; }
@@ -22,13 +24,13 @@ namespace Genesis {
         bool IsValid() const { return m_Image != VK_NULL_HANDLE; }
 
     private:
-        void CreateImage(VulkanDevice& device);
-        void CreateSampler(VulkanDevice& device);
-        void CreateDescriptorSet(VulkanDevice& device);
-        uint32_t FindMemoryType(VulkanDevice& device, uint32_t typeFilter, VkMemoryPropertyFlags properties);
+        void CreateImage(VulkanDevice &device);
+        void CreateSampler(VulkanDevice &device);
+        void CreateDescriptorSet(VulkanDevice &device);
+        uint32_t FindMemoryType(VulkanDevice &device, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
     private:
-        VulkanDevice* m_Device = nullptr;
+        VulkanDevice *m_Device = nullptr;
         int m_Width = 0;
         int m_Height = 0;
 

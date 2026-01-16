@@ -3,19 +3,21 @@
 #include "genesis/core/Layer.h"
 #include <vulkan/vulkan.h>
 
-namespace Genesis {
+namespace Genesis
+{
 
     class VulkanDevice;
     class VulkanSwapchain;
 
-    class ImGuiLayer : public Layer {
+    class ImGuiLayer : public Layer
+    {
     public:
         ImGuiLayer();
         ~ImGuiLayer() override;
 
         void OnAttach() override;
         void OnDetach() override;
-        void OnEvent(Event& event) override;
+        void OnEvent(Event &event) override;
 
         void Begin();
         void End();

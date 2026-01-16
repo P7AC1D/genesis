@@ -3,13 +3,15 @@
 #include <genesis/Genesis.h>
 #include <memory>
 
-namespace Genesis {
+namespace Genesis
+{
 
     class TerrainSettingsPanel;
     class ImGuiLayer;
 
     // Sandbox layer for testing engine features
-    class Sandbox : public Layer {
+    class Sandbox : public Layer
+    {
     public:
         Sandbox();
         ~Sandbox() override;
@@ -19,7 +21,7 @@ namespace Genesis {
         void OnUpdate(float deltaTime) override;
         void OnRender() override;
         void OnImGuiRender() override;
-        void OnEvent(Event& event) override;
+        void OnEvent(Event &event) override;
 
     private:
         void SetupScene();
@@ -47,8 +49,8 @@ namespace Genesis {
         bool m_FirstMouse = true;
 
         // Time of day
-        float m_TimeOfDay = 10.0f;  // Morning
-        float m_TimeSpeed = 0.0f;    // Hours per second (0 = paused)
+        float m_TimeOfDay = 10.0f; // Morning
+        float m_TimeSpeed = 0.0f;  // Hours per second (0 = paused)
 
         // Debug info
         float m_FrameTime = 0.0f;
