@@ -44,6 +44,16 @@ namespace Genesis {
         return attributeDescriptions;
     }
 
+    Mesh::Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices)
+        : m_Vertices(vertices), m_Indices(indices), 
+          m_VertexCount(static_cast<uint32_t>(vertices.size())),
+          m_IndexCount(static_cast<uint32_t>(indices.size())) {
+    }
+
+    Mesh::Mesh(VulkanDevice& device, const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices) {
+        Init(device, vertices, indices);
+    }
+
     Mesh::~Mesh() {
         if (m_Device) {
             Shutdown();
@@ -52,6 +62,8 @@ namespace Genesis {
 
     void Mesh::Init(VulkanDevice& device, const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices) {
         m_Device = &device;
+        m_Vertices = vertices;
+        m_Indices = indices;
         m_VertexCount = static_cast<uint32_t>(vertices.size());
         m_IndexCount = static_cast<uint32_t>(indices.size());
 

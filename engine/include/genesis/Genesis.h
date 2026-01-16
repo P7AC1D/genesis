@@ -18,5 +18,9 @@
 #include "genesis/ecs/Entity.h"
 #include "genesis/ecs/Components.h"
 
+// Procedural
+#include "genesis/procedural/Noise.h"
+#include "genesis/procedural/TerrainGenerator.h"
+
 // Math
 #include "genesis/math/Math.h"

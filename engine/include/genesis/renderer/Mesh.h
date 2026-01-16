@@ -28,6 +28,10 @@ namespace Genesis {
     class Mesh {
     public:
         Mesh() = default;
+        // CPU-only mesh (for procedural generation before GPU upload)
+        Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
+        // GPU-ready mesh
+        Mesh(VulkanDevice& device, const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
         ~Mesh();
 
         void Init(VulkanDevice& device, const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
@@ -38,6 +42,8 @@ namespace Genesis {
 
         uint32_t GetVertexCount() const { return m_VertexCount; }
         uint32_t GetIndexCount() const { return m_IndexCount; }
+        const std::vector<Vertex>& GetVertices() const { return m_Vertices; }
+        const std::vector<uint32_t>& GetIndices() const { return m_Indices; }
 
         // Low-poly mesh generators
         static std::unique_ptr<Mesh> CreateCube(VulkanDevice& device, const glm::vec3& color = glm::vec3(1.0f));
@@ -54,6 +60,8 @@ namespace Genesis {
         VulkanDevice* m_Device = nullptr;
         std::unique_ptr<VulkanBuffer> m_VertexBuffer;
         std::unique_ptr<VulkanBuffer> m_IndexBuffer;
+        std::vector<Vertex> m_Vertices;
+        std::vector<uint32_t> m_Indices;
         uint32_t m_VertexCount = 0;
         uint32_t m_IndexCount = 0;
     };

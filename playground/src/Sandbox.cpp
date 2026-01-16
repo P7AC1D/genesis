@@ -1,5 +1,6 @@
 #include "Sandbox.h"
 #include <genesis/renderer/VulkanDevice.h>
+#include <random>
 
 namespace Genesis {
 
@@ -15,6 +16,7 @@ namespace Genesis {
         // Setup camera
         m_Camera = Camera(45.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
         m_Camera.SetPosition(m_CameraPosition);
+        m_Camera.SetRotation(m_CameraRotation);
 
         SetupScene();
     }
@@ -25,7 +27,11 @@ namespace Genesis {
         // Wait for GPU to finish before cleanup
         Application::Get().GetRenderer().GetDevice().WaitIdle();
 
-        // Cleanup test meshes before device is destroyed
+        // Cleanup meshes
+        if (m_TerrainMesh) {
+            m_TerrainMesh->Shutdown();
+            m_TerrainMesh.reset();
+        }
         if (m_RockMesh) {
             m_RockMesh->Shutdown();
             m_RockMesh.reset();
@@ -33,10 +39,6 @@ namespace Genesis {
         if (m_TreeMesh) {
             m_TreeMesh->Shutdown();
             m_TreeMesh.reset();
-        }
-        if (m_PlaneMesh) {
-            m_PlaneMesh->Shutdown();
-            m_PlaneMesh.reset();
         }
         if (m_CubeMesh) {
             m_CubeMesh->Shutdown();
@@ -111,33 +113,34 @@ namespace Genesis {
 
         renderer.BeginScene(m_Camera);
 
-        // Render test meshes with transforms
-        if (m_PlaneMesh) {
-            glm::mat4 groundTransform = glm::scale(glm::mat4(1.0f), glm::vec3(50.0f, 1.0f, 50.0f));
-            renderer.Draw(*m_PlaneMesh, groundTransform);
+        // Render procedural terrain
+        if (m_TerrainMesh) {
+            // Center the terrain around origin
+            const auto& settings = m_TerrainGenerator.GetSettings();
+            float offsetX = -(settings.width * settings.cellSize) / 2.0f;
+            float offsetZ = -(settings.depth * settings.cellSize) / 2.0f;
+            glm::mat4 terrainTransform = glm::translate(glm::mat4(1.0f), glm::vec3(offsetX, 0.0f, offsetZ));
+            renderer.Draw(*m_TerrainMesh, terrainTransform);
         }
 
+        // Render a marker cube at origin
         if (m_CubeMesh) {
-            glm::mat4 cubeTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.5f, 0.0f));
+            glm::mat4 cubeTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 5.0f, 0.0f));
             renderer.Draw(*m_CubeMesh, cubeTransform);
         }
 
-        // Render procedural trees
+        // Render trees at procedurally placed positions
         if (m_TreeMesh) {
-            for (int i = 0; i < 10; i++) {
-                float x = (i - 5) * 3.0f;
-                float z = -5.0f + (i % 3) * 2.0f;
-                glm::mat4 treeTransform = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, z));
+            for (const auto& pos : m_TreePositions) {
+                glm::mat4 treeTransform = glm::translate(glm::mat4(1.0f), pos);
                 renderer.Draw(*m_TreeMesh, treeTransform);
             }
         }
 
-        // Render procedural rocks
+        // Render rocks at procedurally placed positions
         if (m_RockMesh) {
-            for (int i = 0; i < 5; i++) {
-                float x = (i - 2) * 2.5f + 0.5f;
-                float z = 3.0f;
-                glm::mat4 rockTransform = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.15f, z));
+            for (const auto& pos : m_RockPositions) {
+                glm::mat4 rockTransform = glm::translate(glm::mat4(1.0f), pos);
                 renderer.Draw(*m_RockMesh, rockTransform);
             }
         }
@@ -159,34 +162,113 @@ namespace Genesis {
     void Sandbox::SetupScene() {
         m_Scene = std::make_shared<Scene>("Playground Scene");
 
-        // Create test meshes using Vulkan device
         auto& device = Application::Get().GetRenderer().GetDevice();
         
+        // Create test meshes
         m_CubeMesh = Mesh::CreateCube(device, {0.8f, 0.2f, 0.2f});
-        m_PlaneMesh = Mesh::CreatePlane(device, 1.0f, {0.3f, 0.7f, 0.3f});
         m_TreeMesh = Mesh::CreateLowPolyTree(device);
         m_RockMesh = Mesh::CreateLowPolyRock(device);
 
+        // Generate procedural terrain
+        GenerateProceduralTerrain();
+        
+        // Place objects on terrain
+        PlaceProceduralObjects();
+
         // Create scene entities
-        auto ground = m_Scene->CreateEntity("Ground");
-        auto testCube = m_Scene->CreateEntity("Test Cube");
+        auto terrain = m_Scene->CreateEntity("Terrain");
+        auto testCube = m_Scene->CreateEntity("Marker Cube");
         auto mainCamera = m_Scene->CreateEntity("Main Camera");
         auto sun = m_Scene->CreateEntity("Sun");
 
-        GenerateProceduralTerrain();
-        PlaceProceduralObjects();
-
-        GEN_INFO("Scene setup complete with {} entities", 4);
+        GEN_INFO("Scene setup complete with procedural terrain ({}x{} grid)", 
+            m_TerrainGenerator.GetSettings().width, 
+            m_TerrainGenerator.GetSettings().depth);
     }
 
     void Sandbox::GenerateProceduralTerrain() {
-        // Future: Generate low-poly terrain using noise
-        GEN_DEBUG("Procedural terrain generation placeholder");
+        GEN_INFO("Generating procedural terrain...");
+        
+        // Configure terrain settings
+        TerrainSettings settings;
+        settings.width = 64;
+        settings.depth = 64;
+        settings.cellSize = 1.0f;
+        settings.heightScale = 8.0f;
+        settings.baseHeight = 0.0f;
+        settings.seed = 42;
+        settings.noiseScale = 0.04f;
+        settings.octaves = 5;
+        settings.persistence = 0.5f;
+        settings.lacunarity = 2.0f;
+        settings.flatShading = true;  // Low-poly look
+        settings.useHeightColors = true;
+        
+        m_TerrainGenerator.SetSettings(settings);
+        
+        // Generate the terrain mesh
+        auto terrainMeshPtr = m_TerrainGenerator.Generate();
+        
+        // Upload to GPU
+        auto& device = Application::Get().GetRenderer().GetDevice();
+        m_TerrainMesh = std::make_unique<Mesh>(device, terrainMeshPtr->GetVertices(), terrainMeshPtr->GetIndices());
+        
+        GEN_INFO("Terrain generated: {} vertices, {} triangles", 
+            terrainMeshPtr->GetVertices().size(),
+            terrainMeshPtr->GetIndices().size() / 3);
     }
 
     void Sandbox::PlaceProceduralObjects() {
-        // Future: Place trees, rocks, etc. using procedural rules
-        GEN_DEBUG("Procedural object placement placeholder");
+        GEN_INFO("Placing procedural objects on terrain...");
+        
+        const auto& settings = m_TerrainGenerator.GetSettings();
+        float halfWidth = (settings.width * settings.cellSize) / 2.0f;
+        float halfDepth = (settings.depth * settings.cellSize) / 2.0f;
+        
+        std::mt19937 rng(settings.seed + 1);  // Different seed for object placement
+        std::uniform_real_distribution<float> distX(-halfWidth * 0.8f, halfWidth * 0.8f);
+        std::uniform_real_distribution<float> distZ(-halfDepth * 0.8f, halfDepth * 0.8f);
+        
+        // Place trees
+        int numTrees = 30;
+        m_TreePositions.reserve(numTrees);
+        
+        for (int i = 0; i < numTrees; i++) {
+            float x = distX(rng);
+            float z = distZ(rng);
+            
+            // Get terrain height at this position (accounting for terrain offset)
+            float terrainX = x + halfWidth;
+            float terrainZ = z + halfDepth;
+            float y = m_TerrainGenerator.GetHeightAt(terrainX, terrainZ);
+            
+            // Only place trees above water level
+            float normalizedHeight = y / settings.heightScale;
+            if (normalizedHeight > settings.sandLevel) {
+                m_TreePositions.push_back(glm::vec3(x, y, z));
+            }
+        }
+        
+        // Place rocks
+        int numRocks = 20;
+        m_RockPositions.reserve(numRocks);
+        
+        for (int i = 0; i < numRocks; i++) {
+            float x = distX(rng);
+            float z = distZ(rng);
+            
+            float terrainX = x + halfWidth;
+            float terrainZ = z + halfDepth;
+            float y = m_TerrainGenerator.GetHeightAt(terrainX, terrainZ);
+            
+            // Place rocks anywhere except deep water
+            float normalizedHeight = y / settings.heightScale;
+            if (normalizedHeight > settings.waterLevel * 0.5f) {
+                m_RockPositions.push_back(glm::vec3(x, y + 0.1f, z));
+            }
+        }
+        
+        GEN_INFO("Placed {} trees and {} rocks", m_TreePositions.size(), m_RockPositions.size());
     }
 
 }

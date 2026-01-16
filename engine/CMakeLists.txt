@@ -19,6 +19,9 @@ set(ENGINE_SOURCES
     src/ecs/Entity.cpp
     src/ecs/Components.cpp
     
+    src/procedural/Noise.cpp
+    src/procedural/TerrainGenerator.cpp
+    
     src/platform/PlatformDetection.cpp
 )
 
