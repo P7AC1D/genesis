@@ -22,5 +22,9 @@
 #include "genesis/procedural/Noise.h"
 #include "genesis/procedural/TerrainGenerator.h"
 
+// World
+#include "genesis/world/Chunk.h"
+#include "genesis/world/ChunkManager.h"
+
 // Math
 #include "genesis/math/Math.h"

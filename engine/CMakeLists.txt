@@ -22,6 +22,9 @@ set(ENGINE_SOURCES
     src/procedural/Noise.cpp
     src/procedural/TerrainGenerator.cpp
     
+    src/world/Chunk.cpp
+    src/world/ChunkManager.cpp
+    
     src/platform/PlatformDetection.cpp
 )
 

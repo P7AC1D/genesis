@@ -20,30 +20,23 @@ namespace Genesis {
 
     private:
         void SetupScene();
-        void GenerateProceduralTerrain();
-        void PlaceProceduralObjects();
 
     private:
         std::shared_ptr<Scene> m_Scene;
         Camera m_Camera;
 
-        // Terrain
-        std::unique_ptr<Mesh> m_TerrainMesh;
-        TerrainGenerator m_TerrainGenerator;
+        // Chunk-based world
+        ChunkManager m_ChunkManager;
 
-        // Test meshes
+        // Shared meshes for objects
         std::unique_ptr<Mesh> m_CubeMesh;
         std::unique_ptr<Mesh> m_TreeMesh;
         std::unique_ptr<Mesh> m_RockMesh;
 
-        // Object placements
-        std::vector<glm::vec3> m_TreePositions;
-        std::vector<glm::vec3> m_RockPositions;
-
         // Camera controller state
         glm::vec3 m_CameraPosition{0.0f, 15.0f, 40.0f};
         glm::vec3 m_CameraRotation{-15.0f, 0.0f, 0.0f};
-        float m_CameraSpeed = 10.0f;
+        float m_CameraSpeed = 15.0f;
         float m_MouseSensitivity = 0.1f;
 
         glm::vec2 m_LastMousePosition{0.0f, 0.0f};

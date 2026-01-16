@@ -1,6 +1,5 @@
 #include "Sandbox.h"
 #include <genesis/renderer/VulkanDevice.h>
-#include <random>
 
 namespace Genesis {
 
@@ -27,11 +26,10 @@ namespace Genesis {
         // Wait for GPU to finish before cleanup
         Application::Get().GetRenderer().GetDevice().WaitIdle();
 
+        // Shutdown chunk manager first
+        m_ChunkManager.Shutdown();
+
         // Cleanup meshes
-        if (m_TerrainMesh) {
-            m_TerrainMesh->Shutdown();
-            m_TerrainMesh.reset();
-        }
         if (m_RockMesh) {
             m_RockMesh->Shutdown();
             m_RockMesh.reset();
@@ -99,6 +97,9 @@ namespace Genesis {
         m_Camera.SetPosition(m_CameraPosition);
         m_Camera.SetRotation(m_CameraRotation);
 
+        // Update chunk manager based on camera position
+        m_ChunkManager.Update(m_CameraPosition);
+
         // Update scene
         if (m_Scene) {
             m_Scene->OnUpdate(deltaTime);
@@ -113,33 +114,26 @@ namespace Genesis {
 
         renderer.BeginScene(m_Camera);
 
-        // Render procedural terrain
-        if (m_TerrainMesh) {
-            // Center the terrain around origin
-            const auto& settings = m_TerrainGenerator.GetSettings();
-            float offsetX = -(settings.width * settings.cellSize) / 2.0f;
-            float offsetZ = -(settings.depth * settings.cellSize) / 2.0f;
-            glm::mat4 terrainTransform = glm::translate(glm::mat4(1.0f), glm::vec3(offsetX, 0.0f, offsetZ));
-            renderer.Draw(*m_TerrainMesh, terrainTransform);
-        }
+        // Render all loaded terrain chunks
+        m_ChunkManager.Render(renderer);
 
         // Render a marker cube at origin
         if (m_CubeMesh) {
-            glm::mat4 cubeTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 5.0f, 0.0f));
+            glm::mat4 cubeTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 10.0f, 0.0f));
             renderer.Draw(*m_CubeMesh, cubeTransform);
         }
 
-        // Render trees at procedurally placed positions
+        // Render trees from all loaded chunks
         if (m_TreeMesh) {
-            for (const auto& pos : m_TreePositions) {
+            for (const auto& pos : m_ChunkManager.GetAllTreePositions()) {
                 glm::mat4 treeTransform = glm::translate(glm::mat4(1.0f), pos);
                 renderer.Draw(*m_TreeMesh, treeTransform);
             }
         }
 
-        // Render rocks at procedurally placed positions
+        // Render rocks from all loaded chunks
         if (m_RockMesh) {
-            for (const auto& pos : m_RockPositions) {
+            for (const auto& pos : m_ChunkManager.GetAllRockPositions()) {
                 glm::mat4 rockTransform = glm::translate(glm::mat4(1.0f), pos);
                 renderer.Draw(*m_RockMesh, rockTransform);
             }
@@ -150,9 +144,6 @@ namespace Genesis {
 
     void Sandbox::OnImGuiRender() {
         // Debug overlay would go here
-        // - FPS counter
-        // - Camera position
-        // - Render stats
     }
 
     void Sandbox::OnEvent(Event& event) {
@@ -164,111 +155,33 @@ namespace Genesis {
 
         auto& device = Application::Get().GetRenderer().GetDevice();
         
-        // Create test meshes
+        // Create shared object meshes
         m_CubeMesh = Mesh::CreateCube(device, {0.8f, 0.2f, 0.2f});
         m_TreeMesh = Mesh::CreateLowPolyTree(device);
         m_RockMesh = Mesh::CreateLowPolyRock(device);
 
-        // Generate procedural terrain
-        GenerateProceduralTerrain();
+        // Initialize chunk-based world
+        WorldSettings worldSettings;
+        worldSettings.chunkSize = 32;
+        worldSettings.cellSize = 1.0f;
+        worldSettings.viewDistance = 3;
+        worldSettings.seed = 42;
         
-        // Place objects on terrain
-        PlaceProceduralObjects();
+        worldSettings.terrainSettings.heightScale = 8.0f;
+        worldSettings.terrainSettings.noiseScale = 0.04f;
+        worldSettings.terrainSettings.octaves = 5;
+        worldSettings.terrainSettings.persistence = 0.5f;
+        worldSettings.terrainSettings.lacunarity = 2.0f;
+        worldSettings.terrainSettings.flatShading = true;
+        worldSettings.terrainSettings.useHeightColors = true;
+        
+        m_ChunkManager.Initialize(device, worldSettings);
 
-        // Create scene entities
-        auto terrain = m_Scene->CreateEntity("Terrain");
-        auto testCube = m_Scene->CreateEntity("Marker Cube");
-        auto mainCamera = m_Scene->CreateEntity("Main Camera");
-        auto sun = m_Scene->CreateEntity("Sun");
+        // Initial chunk load
+        m_ChunkManager.Update(m_CameraPosition);
 
-        GEN_INFO("Scene setup complete with procedural terrain ({}x{} grid)", 
-            m_TerrainGenerator.GetSettings().width, 
-            m_TerrainGenerator.GetSettings().depth);
-    }
-
-    void Sandbox::GenerateProceduralTerrain() {
-        GEN_INFO("Generating procedural terrain...");
-        
-        // Configure terrain settings
-        TerrainSettings settings;
-        settings.width = 64;
-        settings.depth = 64;
-        settings.cellSize = 1.0f;
-        settings.heightScale = 8.0f;
-        settings.baseHeight = 0.0f;
-        settings.seed = 42;
-        settings.noiseScale = 0.04f;
-        settings.octaves = 5;
-        settings.persistence = 0.5f;
-        settings.lacunarity = 2.0f;
-        settings.flatShading = true;  // Low-poly look
-        settings.useHeightColors = true;
-        
-        m_TerrainGenerator.SetSettings(settings);
-        
-        // Generate the terrain mesh
-        auto terrainMeshPtr = m_TerrainGenerator.Generate();
-        
-        // Upload to GPU
-        auto& device = Application::Get().GetRenderer().GetDevice();
-        m_TerrainMesh = std::make_unique<Mesh>(device, terrainMeshPtr->GetVertices(), terrainMeshPtr->GetIndices());
-        
-        GEN_INFO("Terrain generated: {} vertices, {} triangles", 
-            terrainMeshPtr->GetVertices().size(),
-            terrainMeshPtr->GetIndices().size() / 3);
-    }
-
-    void Sandbox::PlaceProceduralObjects() {
-        GEN_INFO("Placing procedural objects on terrain...");
-        
-        const auto& settings = m_TerrainGenerator.GetSettings();
-        float halfWidth = (settings.width * settings.cellSize) / 2.0f;
-        float halfDepth = (settings.depth * settings.cellSize) / 2.0f;
-        
-        std::mt19937 rng(settings.seed + 1);  // Different seed for object placement
-        std::uniform_real_distribution<float> distX(-halfWidth * 0.8f, halfWidth * 0.8f);
-        std::uniform_real_distribution<float> distZ(-halfDepth * 0.8f, halfDepth * 0.8f);
-        
-        // Place trees
-        int numTrees = 30;
-        m_TreePositions.reserve(numTrees);
-        
-        for (int i = 0; i < numTrees; i++) {
-            float x = distX(rng);
-            float z = distZ(rng);
-            
-            // Get terrain height at this position (accounting for terrain offset)
-            float terrainX = x + halfWidth;
-            float terrainZ = z + halfDepth;
-            float y = m_TerrainGenerator.GetHeightAt(terrainX, terrainZ);
-            
-            // Only place trees above water level
-            float normalizedHeight = y / settings.heightScale;
-            if (normalizedHeight > settings.sandLevel) {
-                m_TreePositions.push_back(glm::vec3(x, y, z));
-            }
-        }
-        
-        // Place rocks
-        int numRocks = 20;
-        m_RockPositions.reserve(numRocks);
-        
-        for (int i = 0; i < numRocks; i++) {
-            float x = distX(rng);
-            float z = distZ(rng);
-            
-            float terrainX = x + halfWidth;
-            float terrainZ = z + halfDepth;
-            float y = m_TerrainGenerator.GetHeightAt(terrainX, terrainZ);
-            
-            // Place rocks anywhere except deep water
-            float normalizedHeight = y / settings.heightScale;
-            if (normalizedHeight > settings.waterLevel * 0.5f) {
-                m_RockPositions.push_back(glm::vec3(x, y + 0.1f, z));
-            }
-        }
-        
-        GEN_INFO("Placed {} trees and {} rocks", m_TreePositions.size(), m_RockPositions.size());
+        GEN_INFO("Scene setup complete with chunk-based world ({}x{} chunks visible)", 
+            worldSettings.viewDistance * 2 + 1, worldSettings.viewDistance * 2 + 1);
     }
 
 }
