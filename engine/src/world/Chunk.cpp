@@ -171,20 +171,13 @@ namespace Genesis
                     height += std::pow(ridgeNoise, 4.0f) * settings.peakBoost * upliftMask;
                 }
 
-                // Normalize to [0,1]
+                // Normalize to [0,1] and store raw height (shaping applied after erosion)
                 height = (height + 1.0f) * 0.5f;
-
-                // Height-dependent shaping: sharp tops, soft bases
-                // lerp(1.0, 0.6, heightNorm) softens lower elevations
-                float heightNorm = std::clamp(height, 0.0f, 1.0f);
-                float shapeFactor = 1.0f - 0.4f * heightNorm; // lerp(1.0, 0.6, h)
-                height *= shapeFactor;
-
                 heightmap[z * width + x] = settings.baseHeight + height * settings.heightScale;
             }
         }
 
-        // Apply erosion effects
+        // Step 5: Apply erosion effects
         if (settings.useErosion)
         {
             // Cheap erosion: slope-based shaping and valley deepening
@@ -317,6 +310,30 @@ namespace Genesis
                         if (water < 0.01f)
                             break;
                     }
+                }
+            }
+        }
+
+        // Step 6: Apply height-dependent shaping (after erosion)
+        // Sharp peaks, soft bases: lerp(1.0, 0.6, heightNorm)
+        {
+            float minH = settings.baseHeight;
+            float maxH = settings.baseHeight + settings.heightScale;
+            float range = maxH - minH;
+
+            for (int z = 0; z < depth; z++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int idx = z * width + x;
+                    float h = heightmap[idx];
+
+                    // Normalize height to [0,1]
+                    float heightNorm = (range > 0.0f) ? std::clamp((h - minH) / range, 0.0f, 1.0f) : 0.0f;
+
+                    // Soft bases, sharp peaks: multiply by lerp(1.0, 0.6, h)
+                    float shapeFactor = 1.0f - 0.4f * heightNorm;
+                    heightmap[idx] = minH + (h - minH) * shapeFactor;
                 }
             }
         }

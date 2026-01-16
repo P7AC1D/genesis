@@ -525,21 +525,15 @@ namespace Genesis
                     height += std::pow(ridgeNoise, 4.0f) * m_TerrainSettings.peakBoost * upliftMask;
                 }
 
-                // Normalize to [0,1]
+                // Normalize to [0,1] and store raw height (shaping applied after erosion)
                 height = (height + 1.0f) * 0.5f;
-
-                // Height-dependent shaping: sharp tops, soft bases
-                float heightNorm = std::clamp(height, 0.0f, 1.0f);
-                float shapeFactor = 1.0f - 0.4f * heightNorm; // lerp(1.0, 0.6, h)
-                height *= shapeFactor;
-
                 height = m_TerrainSettings.baseHeight + height * m_TerrainSettings.heightScale;
 
                 heightData[y * PREVIEW_SIZE + x] = height;
             }
         }
 
-        // Apply slope-based erosion post-processing
+        // Step 5: Apply slope-based erosion post-processing
         if (m_TerrainSettings.useErosion)
         {
             std::vector<float> eroded = heightData;
@@ -580,6 +574,30 @@ namespace Genesis
             }
 
             heightData = eroded;
+        }
+
+        // Step 6: Apply height-dependent shaping (after erosion)
+        // Sharp peaks, soft bases: lerp(1.0, 0.6, heightNorm)
+        {
+            float minH = m_TerrainSettings.baseHeight;
+            float maxH = m_TerrainSettings.baseHeight + m_TerrainSettings.heightScale;
+            float range = maxH - minH;
+
+            for (int y = 0; y < PREVIEW_SIZE; y++)
+            {
+                for (int x = 0; x < PREVIEW_SIZE; x++)
+                {
+                    int idx = y * PREVIEW_SIZE + x;
+                    float h = heightData[idx];
+
+                    // Normalize height to [0,1]
+                    float heightNorm = (range > 0.0f) ? std::clamp((h - minH) / range, 0.0f, 1.0f) : 0.0f;
+
+                    // Soft bases, sharp peaks: multiply by lerp(1.0, 0.6, h)
+                    float shapeFactor = 1.0f - 0.4f * heightNorm;
+                    heightData[idx] = minH + (h - minH) * shapeFactor;
+                }
+            }
         }
 
         // Calculate min/max heights
