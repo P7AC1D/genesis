@@ -68,6 +68,8 @@ namespace Genesis
             GEN_INFO("Apply Changes button clicked!");
             ApplySettings();
         }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Rebuilds terrain chunks using the current settings.\nTip: the preview updates live; the world updates when you Apply.");
 
         if (m_NeedsPreviewUpdate)
         {
@@ -95,6 +97,8 @@ namespace Genesis
                 {
                     m_NeedsPreviewUpdate = true;
                 }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Recomputes the preview texture using the current UI values.\nThis does not regenerate the world until Apply.");
             }
             else
             {
@@ -112,14 +116,14 @@ namespace Genesis
                 m_NeedsPreviewUpdate = true;
             }
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Maximum terrain elevation");
+                ImGui::SetTooltip("Vertical exaggeration (world units).\nHigher = taller mountains and deeper valleys.");
 
             if (ImGui::SliderFloat("Base Height", &m_TerrainSettings.baseHeight, -20.0f, 20.0f, "%.1f"))
             {
                 m_NeedsPreviewUpdate = true;
             }
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Base terrain level offset");
+                ImGui::SetTooltip("Adds a constant offset to all terrain heights (world units).\nUse this to raise/lower the entire landscape.");
 
             int seed = static_cast<int>(m_Seed);
             if (ImGui::InputInt("Seed", &seed))
@@ -128,14 +132,14 @@ namespace Genesis
                 m_NeedsPreviewUpdate = true;
             }
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Random seed for terrain generation");
+                ImGui::SetTooltip("Random seed for generation.\nSame seed + same settings = same world pattern.");
 
             if (ImGui::SliderInt("View Distance", &m_ViewDistance, 1, 6))
             {
                 // View distance affects chunk loading, not preview
             }
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Number of chunks to render in each direction");
+                ImGui::SetTooltip("How many chunks load around the camera.\nHigher = see farther but costs CPU/GPU and memory.");
         }
     }
 
@@ -148,28 +152,28 @@ namespace Genesis
                 m_NeedsPreviewUpdate = true;
             }
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Scale of the noise pattern (smaller = larger features)");
+                ImGui::SetTooltip("Controls feature size.\nLower = broad landforms; higher = smaller, noisier detail.");
 
             if (ImGui::SliderInt("Octaves", &m_TerrainSettings.octaves, 1, 8))
             {
                 m_NeedsPreviewUpdate = true;
             }
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Number of noise layers to combine");
+                ImGui::SetTooltip("Number of layered noise passes.\nMore octaves = more detail, but slower.");
 
             if (ImGui::SliderFloat("Persistence", &m_TerrainSettings.persistence, 0.1f, 0.9f, "%.2f"))
             {
                 m_NeedsPreviewUpdate = true;
             }
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Amplitude multiplier for each octave (lower = smoother)");
+                ImGui::SetTooltip("How much each octave contributes (amplitude falloff).\nLower = smoother terrain; higher = rougher.");
 
             if (ImGui::SliderFloat("Lacunarity", &m_TerrainSettings.lacunarity, 1.0f, 4.0f, "%.2f"))
             {
                 m_NeedsPreviewUpdate = true;
             }
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Frequency multiplier for each octave (higher = more detail)");
+                ImGui::SetTooltip("Frequency multiplier per octave.\nHigher = more small-scale detail per octave.");
         }
     }
 
@@ -182,7 +186,7 @@ namespace Genesis
                 m_NeedsPreviewUpdate = true;
             }
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Apply domain warping for more organic terrain");
+                ImGui::SetTooltip("Distorts the noise sampling coordinates.\nBreaks up grid artifacts and makes terrain feel more organic (slower).");
 
             if (m_TerrainSettings.useWarp)
             {
@@ -191,21 +195,21 @@ namespace Genesis
                     m_NeedsPreviewUpdate = true;
                 }
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Amount of coordinate distortion");
+                    ImGui::SetTooltip("How strongly the coordinates are warped.\n0 = off; higher = more twisting/chaos.");
 
                 if (ImGui::SliderFloat("Warp Scale", &m_TerrainSettings.warpScale, 0.1f, 2.0f, "%.2f"))
                 {
                     m_NeedsPreviewUpdate = true;
                 }
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Scale of warp noise relative to terrain noise");
+                    ImGui::SetTooltip("Size of the warping pattern.\nLower = broad warps; higher = tighter, noisier warps.");
 
                 if (ImGui::SliderInt("Warp Levels", &m_TerrainSettings.warpLevels, 1, 4))
                 {
                     m_NeedsPreviewUpdate = true;
                 }
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Number of warp iterations (1-3 recommended)");
+                    ImGui::SetTooltip("How many times to warp the coordinates.\nMore levels = richer shapes but slower (1-3 recommended).");
             }
         }
     }
@@ -219,7 +223,7 @@ namespace Genesis
                 m_NeedsPreviewUpdate = true;
             }
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Use ridge noise to create sharp mountain ranges instead of smooth hills");
+                ImGui::SetTooltip("Creates sharp crests and spines (mountain ridges) instead of smooth hills.\nRecommended ON for mountain terrain.");
 
             if (m_TerrainSettings.useRidgeNoise)
             {
@@ -228,21 +232,21 @@ namespace Genesis
                     m_NeedsPreviewUpdate = true;
                 }
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Blend weight: 0 = smooth hills, 1 = sharp ridges");
+                    ImGui::SetTooltip("How much ridge noise affects height.\n0 = base terrain only; 1 = ridges dominate.\nIf Uplift Mask is enabled, ridges are limited to mountain bands.");
 
                 if (ImGui::SliderFloat("Ridge Sharpness", &m_TerrainSettings.ridgePower, 1.0f, 4.0f, "%.1f"))
                 {
                     m_NeedsPreviewUpdate = true;
                 }
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Power exponent: higher = sharper peaks");
+                    ImGui::SetTooltip("Sharpness of ridge peaks (power exponent).\n1 = softer ridges; 3-4 = very sharp, jagged peaks.");
 
                 if (ImGui::SliderFloat("Ridge Scale", &m_TerrainSettings.ridgeScale, 0.5f, 2.0f, "%.2f"))
                 {
                     m_NeedsPreviewUpdate = true;
                 }
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Scale of ridge features relative to base noise");
+                    ImGui::SetTooltip("Spacing of ridge lines.\nLower = wider mountain spines; higher = tighter, more frequent ridges.");
 
                 ImGui::Separator();
                 ImGui::Text("Tectonic Uplift Mask");
@@ -252,7 +256,7 @@ namespace Genesis
                     m_NeedsPreviewUpdate = true;
                 }
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Mountains appear in bands, creating plains and foothills");
+                    ImGui::SetTooltip("Limits mountains to large-scale bands.\nCreates plains, foothills, and distinct mountain ranges.");
 
                 if (m_TerrainSettings.useUpliftMask)
                 {
@@ -261,28 +265,28 @@ namespace Genesis
                         m_NeedsPreviewUpdate = true;
                     }
                     if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("Size of tectonic regions (smaller = larger mountain ranges)");
+                        ImGui::SetTooltip("Size of tectonic regions (sample frequency).\nLower = larger continents/range bands; higher = smaller patches.");
 
                     if (ImGui::SliderFloat("Plains Threshold", &m_TerrainSettings.upliftThresholdLow, 0.0f, 0.6f, "%.2f"))
                     {
                         m_NeedsPreviewUpdate = true;
                     }
                     if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("Below this = flat plains");
+                        ImGui::SetTooltip("Uplift values below this become plains (ridge contribution fades out).");
 
                     if (ImGui::SliderFloat("Mountain Threshold", &m_TerrainSettings.upliftThresholdHigh, 0.4f, 1.0f, "%.2f"))
                     {
                         m_NeedsPreviewUpdate = true;
                     }
                     if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("Above this = full mountain height");
+                        ImGui::SetTooltip("Uplift values above this become full mountains (maximum ridge contribution).\nTip: keep this higher than Plains Threshold.");
 
                     if (ImGui::SliderFloat("Transition Sharpness", &m_TerrainSettings.upliftPower, 0.5f, 3.0f, "%.1f"))
                     {
                         m_NeedsPreviewUpdate = true;
                     }
                     if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("How sharp the transition from plains to mountains");
+                        ImGui::SetTooltip("Sharpens the plains→foothills→mountains transition.\nHigher = more distinct mountain bands.");
                 }
             }
         }
@@ -294,19 +298,30 @@ namespace Genesis
         {
             ImGui::Checkbox("Flat Shading", &m_TerrainSettings.flatShading);
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Use face normals for low-poly style");
+                ImGui::SetTooltip("Uses per-face normals for a faceted low-poly look.\nOff = smoother lighting (if supported by the mesh).");
 
             ImGui::Checkbox("Height-Based Colors", &m_TerrainSettings.useHeightColors);
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Color terrain based on elevation");
+                ImGui::SetTooltip("Applies water/sand/grass/rock/snow bands based on height.\nIf off, terrain uses the default material color.");
 
             if (m_TerrainSettings.useHeightColors)
             {
                 ImGui::Text("Height Thresholds (normalized):");
                 ImGui::SliderFloat("Water Level", &m_TerrainSettings.waterLevel, 0.0f, 1.0f, "%.2f");
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Below this height = water color band.\nValues are normalized: 0 = lowest, 1 = highest.");
+
                 ImGui::SliderFloat("Sand Level", &m_TerrainSettings.sandLevel, 0.0f, 1.0f, "%.2f");
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Between water and sand level = beach/shoreline band.\nTip: keep Sand Level slightly above Water Level.");
+
                 ImGui::SliderFloat("Grass Level", &m_TerrainSettings.grassLevel, 0.0f, 1.0f, "%.2f");
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Upper limit for grass band.\nAbove this, terrain transitions toward rock/snow.");
+
                 ImGui::SliderFloat("Rock Level", &m_TerrainSettings.rockLevel, 0.0f, 1.0f, "%.2f");
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Above this height = rock/snow.\nTip: higher Rock Level makes less exposed rock.");
             }
         }
     }
@@ -316,12 +331,14 @@ namespace Genesis
         if (ImGui::CollapsingHeader("Water"))
         {
             ImGui::Checkbox("Enable Water", &m_WaterEnabled);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Toggles the water surface rendering.\nIf off, only the terrain mesh is shown.");
 
             if (m_WaterEnabled)
             {
                 ImGui::SliderFloat("Sea Level", &m_SeaLevel, -10.0f, 20.0f, "%.1f");
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Height of the water surface");
+                    ImGui::SetTooltip("Water plane height (world units).\nHigher sea level floods valleys and creates lakes/shorelines.");
             }
         }
     }

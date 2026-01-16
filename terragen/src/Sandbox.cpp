@@ -273,9 +273,15 @@ namespace Genesis
 
         // Initialize chunk-based world
         WorldSettings worldSettings;
-        worldSettings.chunkSize = 32;   // Grid cells per chunk
-        worldSettings.cellSize = 1.0f;  // World units per cell
-        worldSettings.viewDistance = 3; // Load 7x7 chunks
+
+        // Terrain resolution (2x): keep chunk world size the same but increase mesh density.
+        // Old: 32 cells @ 1.0 units/cell => 32 world units/chunk
+        // New: 64 cells @ 0.5 units/cell => 32 world units/chunk
+        static constexpr int kChunkCellsPerSide = 64;
+        static constexpr float kWorldUnitsPerCell = 0.5f;
+        worldSettings.chunkSize = kChunkCellsPerSide; // Grid cells per chunk
+        worldSettings.cellSize = kWorldUnitsPerCell;  // World units per cell
+        worldSettings.viewDistance = 3;               // Load 7x7 chunks
         worldSettings.seed = 42;
         worldSettings.seaLevel = 2.0f;
         worldSettings.waterEnabled = true;
