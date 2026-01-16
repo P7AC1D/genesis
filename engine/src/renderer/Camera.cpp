@@ -40,15 +40,22 @@ namespace Genesis {
     }
 
     glm::vec3 Camera::GetForward() const {
+        // Standard FPS camera: yaw rotates around Y, pitch rotates around X
+        // At rotation (0,0,0), forward is -Z
+        float yaw = glm::radians(m_Rotation.y);
+        float pitch = glm::radians(m_Rotation.x);
+        
         glm::vec3 front;
-        front.x = cos(glm::radians(m_Rotation.y)) * cos(glm::radians(m_Rotation.x));
-        front.y = sin(glm::radians(m_Rotation.x));
-        front.z = sin(glm::radians(m_Rotation.y)) * cos(glm::radians(m_Rotation.x));
+        front.x = sin(yaw) * cos(pitch);
+        front.y = -sin(pitch);
+        front.z = -cos(yaw) * cos(pitch);
         return glm::normalize(front);
     }
 
     glm::vec3 Camera::GetRight() const {
-        return glm::normalize(glm::cross(GetForward(), glm::vec3(0.0f, 1.0f, 0.0f)));
+        // Right is perpendicular to forward on the XZ plane (yaw only)
+        float yaw = glm::radians(m_Rotation.y);
+        return glm::vec3(cos(yaw), 0.0f, sin(yaw));
     }
 
     glm::vec3 Camera::GetUp() const {
@@ -61,12 +68,10 @@ namespace Genesis {
     }
 
     void Camera::RecalculateViewMatrix() {
-        glm::mat4 transform = glm::translate(glm::mat4(1.0f), m_Position)
-            * glm::rotate(glm::mat4(1.0f), glm::radians(m_Rotation.y), glm::vec3(0.0f, 1.0f, 0.0f))
-            * glm::rotate(glm::mat4(1.0f), glm::radians(m_Rotation.x), glm::vec3(1.0f, 0.0f, 0.0f))
-            * glm::rotate(glm::mat4(1.0f), glm::radians(m_Rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-
-        m_ViewMatrix = glm::inverse(transform);
+        // Use lookAt for consistency with GetForward()
+        glm::vec3 forward = GetForward();
+        glm::vec3 target = m_Position + forward;
+        m_ViewMatrix = glm::lookAt(m_Position, target, glm::vec3(0.0f, 1.0f, 0.0f));
     }
 
     void Camera::RecalculateProjectionMatrix() {
