@@ -1,8 +1,8 @@
 #include "genesis/world/Chunk.h"
 #include "genesis/renderer/VulkanDevice.h"
 #include "genesis/procedural/Water.h"
-#include "genesis/procedural/Biome.h"
 #include <random>
+#include <cmath>
 
 namespace Genesis {
 
@@ -28,41 +28,36 @@ namespace Genesis {
                worldZ >= origin.z && worldZ < origin.z + chunkWorldSize;
     }
 
-    void Chunk::Generate(const TerrainSettings& baseSettings, uint32_t worldSeed, 
-                         float seaLevel, BiomeGenerator* biomeGen) {
-        // Create chunk-specific terrain settings
-        TerrainSettings settings = baseSettings;
-        settings.width = m_Size;
-        settings.depth = m_Size;
-        settings.cellSize = m_CellSize;
+    void Chunk::Generate(const TerrainSettings& settings, uint32_t worldSeed, float seaLevel) {
+        // Configure terrain generator
+        TerrainSettings chunkSettings = settings;
+        chunkSettings.width = m_Size;
+        chunkSettings.depth = m_Size;
+        chunkSettings.cellSize = m_CellSize;
+        chunkSettings.seed = worldSeed;
+        m_TerrainGenerator.SetSettings(chunkSettings);
         
-        // Keep world seed for terrain - must be same across all chunks for seamless noise
-        settings.seed = worldSeed;
-        
-        m_TerrainGenerator.SetSettings(settings);
-        
-        // Generate with world-space offset for seamless noise
         glm::vec3 worldPos = GetWorldPosition();
         
-        // Generate the mesh - vertices in local space, noise sampled from world space
-        auto terrainMesh = GenerateWithWorldOffset(worldPos.x, worldPos.z, worldSeed, biomeGen);
+        // Generate terrain mesh
+        auto terrainMesh = GenerateTerrainMesh(worldPos.x, worldPos.z, worldSeed);
         
         if (terrainMesh) {
             m_Mesh = std::make_unique<Mesh>(terrainMesh->GetVertices(), terrainMesh->GetIndices());
         }
         
-        // Generate water plane if sea level is specified
+        // Generate water plane
         GenerateWater(seaLevel);
         
-        // Generate object positions (uses chunk-specific seed derived from world seed)
-        GenerateObjects(worldSeed, seaLevel, biomeGen);
+        // Generate object positions
+        GenerateObjects(worldSeed, seaLevel);
         
         m_State = ChunkState::Loading;
     }
 
-    std::shared_ptr<Mesh> Chunk::GenerateWithWorldOffset(float offsetX, float offsetZ, uint32_t worldSeed, BiomeGenerator* biomeGen) {
+    std::shared_ptr<Mesh> Chunk::GenerateTerrainMesh(float offsetX, float offsetZ, uint32_t worldSeed) {
         const auto& settings = m_TerrainGenerator.GetSettings();
-        SimplexNoise noise(worldSeed);  // Use world seed, not chunk seed
+        SimplexNoise noise(worldSeed);
         
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
@@ -72,23 +67,17 @@ namespace Genesis {
         
         // Generate heightmap with world-space noise sampling
         std::vector<float> heightmap(width * depth);
-        std::vector<BiomeData> biomemap(width * depth);  // Store biome data for coloring
         
         for (int z = 0; z < depth; z++) {
             for (int x = 0; x < width; x++) {
-                // Local position
                 float localX = x * settings.cellSize;
                 float localZ = z * settings.cellSize;
-                
-                // World position for noise sampling
                 float worldX = offsetX + localX;
                 float worldZ = offsetZ + localZ;
                 
-                // Sample noise at world coordinates
                 float noiseX = worldX * settings.noiseScale;
                 float noiseZ = worldZ * settings.noiseScale;
                 
-                // Use domain warping if enabled for more organic terrain
                 float height;
                 if (settings.useWarp && settings.warpLevels > 0) {
                     height = noise.MultiWarpedFBM(noiseX, noiseZ, 
@@ -100,26 +89,16 @@ namespace Genesis {
                 }
                 
                 height = (height + 1.0f) * 0.5f;
-                float baseHeight = settings.baseHeight + height * settings.heightScale;
-                
-                // Get biome and modify height
-                if (biomeGen) {
-                    BiomeData biome = biomeGen->GetBiomeAt(worldX, worldZ);
-                    biomemap[z * width + x] = biome;
-                    heightmap[z * width + x] = biomeGen->ModifyHeight(biome, baseHeight);
-                } else {
-                    heightmap[z * width + x] = baseHeight;
-                }
+                heightmap[z * width + x] = settings.baseHeight + height * settings.heightScale;
             }
         }
         
-        // Use absolute height range based on settings, not per-chunk min/max
-        // This ensures consistent coloring across all chunks
+        // Height range for color normalization
         float minHeight = settings.baseHeight;
-        float maxHeight = settings.baseHeight + settings.heightScale * 2.0f;  // Account for biome height multipliers
+        float maxHeight = settings.baseHeight + settings.heightScale;
         float heightRange = maxHeight - minHeight;
         
-        // Generate mesh with flat shading (same as TerrainGenerator)
+        // Generate mesh with flat shading (per-triangle colors/normals)
         for (int z = 0; z < settings.depth; z++) {
             for (int x = 0; x < settings.width; x++) {
                 float x0 = x * settings.cellSize;
@@ -140,19 +119,8 @@ namespace Genesis {
                 // Triangle 1: p00, p01, p10 (CCW)
                 glm::vec3 normal1 = glm::normalize(glm::cross(p01 - p00, p10 - p00));
                 float avgH1 = (h00 + h10 + h01) / 3.0f;
-                float normH1 = (avgH1 - minHeight) / heightRange;
-                normH1 = glm::clamp(normH1, 0.0f, 1.0f);
-                
-                glm::vec3 color1;
-                if (biomeGen) {
-                    // Use center of triangle for biome lookup
-                    float worldCenterX = offsetX + (x0 + x1 + x0) / 3.0f;
-                    float worldCenterZ = offsetZ + (z0 + z0 + z1) / 3.0f;
-                    BiomeData biome = biomeGen->GetBiomeAt(worldCenterX, worldCenterZ);
-                    color1 = biomeGen->GetTerrainColor(biome, normH1);
-                } else {
-                    color1 = TerrainGenerator::GetHeightColor(normH1, settings);
-                }
+                float normH1 = glm::clamp((avgH1 - minHeight) / heightRange, 0.0f, 1.0f);
+                glm::vec3 color1 = TerrainGenerator::GetHeightColor(normH1, settings);
                 
                 uint32_t baseIdx = static_cast<uint32_t>(vertices.size());
                 vertices.push_back({p00, normal1, color1});
@@ -165,18 +133,8 @@ namespace Genesis {
                 // Triangle 2: p10, p01, p11 (CCW)
                 glm::vec3 normal2 = glm::normalize(glm::cross(p01 - p10, p11 - p10));
                 float avgH2 = (h10 + h11 + h01) / 3.0f;
-                float normH2 = (avgH2 - minHeight) / heightRange;
-                normH2 = glm::clamp(normH2, 0.0f, 1.0f);
-                
-                glm::vec3 color2;
-                if (biomeGen) {
-                    float worldCenterX = offsetX + (x1 + x0 + x1) / 3.0f;
-                    float worldCenterZ = offsetZ + (z0 + z1 + z1) / 3.0f;
-                    BiomeData biome = biomeGen->GetBiomeAt(worldCenterX, worldCenterZ);
-                    color2 = biomeGen->GetTerrainColor(biome, normH2);
-                } else {
-                    color2 = TerrainGenerator::GetHeightColor(normH2, settings);
-                }
+                float normH2 = glm::clamp((avgH2 - minHeight) / heightRange, 0.0f, 1.0f);
+                glm::vec3 color2 = TerrainGenerator::GetHeightColor(normH2, settings);
                 
                 baseIdx = static_cast<uint32_t>(vertices.size());
                 vertices.push_back({p10, normal2, color2});
@@ -188,30 +146,24 @@ namespace Genesis {
             }
         }
         
-        // Store heightmap for later queries
-        m_TerrainGenerator.SetSettings(m_TerrainGenerator.GetSettings()); // Reset
-        
         return std::make_shared<Mesh>(vertices, indices);
     }
 
-    void Chunk::GenerateObjects(uint32_t worldSeed, float seaLevel, BiomeGenerator* biomeGen) {
+    void Chunk::GenerateObjects(uint32_t worldSeed, float seaLevel) {
         const auto& settings = m_TerrainGenerator.GetSettings();
         glm::vec3 worldPos = GetWorldPosition();
         float chunkWorldSize = m_Size * m_CellSize;
         
-        // Seed RNG based on chunk position
         uint32_t chunkSeed = worldSeed ^ (static_cast<uint32_t>(m_ChunkX * 198491317) ^ 
                                           static_cast<uint32_t>(m_ChunkZ * 6542989));
         std::mt19937 rng(chunkSeed);
         std::uniform_real_distribution<float> distPos(0.0f, chunkWorldSize);
         std::uniform_real_distribution<float> distProb(0.0f, 1.0f);
         
-        // Height range for normalization
         float minHeight = settings.baseHeight;
-        float maxHeight = settings.baseHeight + settings.heightScale * 2.0f;
+        float maxHeight = settings.baseHeight + settings.heightScale;
         float heightRange = maxHeight - minHeight;
         
-        // Sample more potential positions and use biome-based probability
         int numSamples = static_cast<int>((chunkWorldSize * chunkWorldSize) / 25.0f);
         m_TreePositions.reserve(numSamples / 4);
         m_RockPositions.reserve(numSamples / 6);
@@ -221,41 +173,25 @@ namespace Genesis {
             float localZ = distPos(rng);
             float height = GetHeightAtLocal(localX, localZ);
             
-            // Don't place objects below sea level
-            if (height <= seaLevel + 0.3f) continue;
+            if (height <= seaLevel + 0.5f) continue;
             
             float worldX = worldPos.x + localX;
             float worldZ = worldPos.z + localZ;
             float normalizedHeight = glm::clamp((height - minHeight) / heightRange, 0.0f, 1.0f);
             float randomValue = distProb(rng);
             
-            if (biomeGen) {
-                // Use biome-based object placement
-                BiomeData biome = biomeGen->GetBiomeAt(worldX, worldZ);
-                
-                // Trees
-                if (biomeGen->ShouldSpawnTree(biome, normalizedHeight, randomValue)) {
+            // Trees in grass zone
+            if (normalizedHeight > settings.sandLevel && normalizedHeight < settings.rockLevel) {
+                if (randomValue < 0.01f) {
                     m_TreePositions.push_back(glm::vec3(worldX, height, worldZ));
                 }
-                
-                // Rocks (use different random value)
-                randomValue = distProb(rng);
-                if (biomeGen->ShouldSpawnRock(biome, normalizedHeight, randomValue)) {
+            }
+            
+            // Rocks everywhere above water
+            randomValue = distProb(rng);
+            if (normalizedHeight > settings.waterLevel * 0.5f) {
+                if (randomValue < 0.007f) {
                     m_RockPositions.push_back(glm::vec3(worldX, height + 0.1f, worldZ));
-                }
-            } else {
-                // Fallback to old height-based placement
-                if (normalizedHeight > settings.sandLevel && normalizedHeight < settings.rockLevel) {
-                    if (randomValue < 0.01f) {  // 1% chance
-                        m_TreePositions.push_back(glm::vec3(worldX, height, worldZ));
-                    }
-                }
-                
-                randomValue = distProb(rng);
-                if (normalizedHeight > settings.waterLevel * 0.5f) {
-                    if (randomValue < 0.007f) {  // 0.7% chance
-                        m_RockPositions.push_back(glm::vec3(worldX, height + 0.1f, worldZ));
-                    }
                 }
             }
         }
@@ -263,15 +199,13 @@ namespace Genesis {
     
     void Chunk::GenerateWater(float seaLevel) {
         float chunkWorldSize = m_Size * m_CellSize;
-        glm::vec3 worldPos = GetWorldPosition();
         
-        // Generate water plane mesh (in local coordinates)
         auto waterMesh = WaterGenerator::GeneratePlane(
-            chunkWorldSize * 0.5f,  // center at chunk center (local coords)
+            chunkWorldSize * 0.5f,
             chunkWorldSize * 0.5f,
             chunkWorldSize,
             chunkWorldSize,
-            8,  // subdivisions
+            8,
             seaLevel
         );
         
@@ -285,7 +219,6 @@ namespace Genesis {
         const auto& settings = m_TerrainGenerator.GetSettings();
         glm::vec3 worldPos = GetWorldPosition();
         
-        // Sample noise at world coordinates
         float worldX = worldPos.x + localX;
         float worldZ = worldPos.z + localZ;
         
@@ -293,7 +226,6 @@ namespace Genesis {
         float noiseX = worldX * settings.noiseScale;
         float noiseZ = worldZ * settings.noiseScale;
         
-        // Use domain warping if enabled (must match GenerateWithWorldOffset)
         float height;
         if (settings.useWarp && settings.warpLevels > 0) {
             height = noise.MultiWarpedFBM(noiseX, noiseZ, 
@@ -314,11 +246,9 @@ namespace Genesis {
 
     void Chunk::Upload(VulkanDevice& device) {
         if (m_Mesh && m_State == ChunkState::Loading) {
-            // Create GPU buffers for terrain
             auto cpuMesh = std::move(m_Mesh);
             m_Mesh = std::make_unique<Mesh>(device, cpuMesh->GetVertices(), cpuMesh->GetIndices());
             
-            // Create GPU buffers for water
             if (m_WaterMesh && m_HasWater) {
                 auto cpuWater = std::move(m_WaterMesh);
                 m_WaterMesh = std::make_unique<Mesh>(device, cpuWater->GetVertices(), cpuWater->GetIndices());

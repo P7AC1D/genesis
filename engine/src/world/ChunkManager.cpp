@@ -31,14 +31,6 @@ namespace Genesis
             m_Settings.terrainSettings.flatShading = true;
             m_Settings.terrainSettings.useHeightColors = true;
         }
-        
-        // Initialize biome generator
-        if (m_Settings.biomesEnabled) {
-            m_BiomeGenerator.Initialize(m_Settings.seed);
-            m_BiomeGenerator.SetTemperatureScale(m_Settings.temperatureScale);
-            m_BiomeGenerator.SetMoistureScale(m_Settings.moistureScale);
-            GEN_INFO("Biome system enabled");
-        }
 
         GEN_INFO("ChunkManager initialized (chunk size: {}, view distance: {})",
                  m_Settings.chunkSize, m_Settings.viewDistance);
@@ -46,7 +38,6 @@ namespace Genesis
 
     void ChunkManager::Shutdown()
     {
-        // Wait for GPU before cleanup
         if (m_Device)
         {
             m_Device->WaitIdle();
@@ -83,12 +74,10 @@ namespace Genesis
 
         glm::ivec2 cameraChunk = WorldToChunkCoord(cameraPosition.x, cameraPosition.z);
 
-        // Only update if camera moved to a different chunk
         if (cameraChunk == m_LastCameraChunk)
             return;
         m_LastCameraChunk = cameraChunk;
 
-        // Determine which chunks should be loaded
         std::vector<glm::ivec2> chunksToLoad;
         int viewDist = m_Settings.viewDistance;
 
@@ -98,7 +87,6 @@ namespace Genesis
             {
                 glm::ivec2 coord(cameraChunk.x + x, cameraChunk.y + z);
 
-                // Check if not already loaded
                 if (m_LoadedChunks.find(coord) == m_LoadedChunks.end())
                 {
                     chunksToLoad.push_back(coord);
@@ -106,40 +94,33 @@ namespace Genesis
             }
         }
 
-        // Determine which chunks should be unloaded
         std::vector<glm::ivec2> chunksToUnload;
         for (const auto &[coord, chunk] : m_LoadedChunks)
         {
             int dx = std::abs(coord.x - cameraChunk.x);
             int dz = std::abs(coord.y - cameraChunk.y);
 
-            // Unload if outside view distance + 1 buffer
             if (dx > viewDist + 1 || dz > viewDist + 1)
             {
                 chunksToUnload.push_back(coord);
             }
         }
 
-        // Unloading destroys GPU buffers; ensure the GPU is idle first to avoid
-        // destroying resources that are still referenced by in-flight command buffers.
         if (!chunksToUnload.empty())
         {
             m_Device->WaitIdle();
         }
 
-        // Unload chunks
         for (const auto &coord : chunksToUnload)
         {
             UnloadChunk(coord.x, coord.y);
         }
 
-        // Load chunks
         for (const auto &coord : chunksToLoad)
         {
             LoadChunk(coord.x, coord.y);
         }
 
-        // Rebuild object positions if chunks changed
         if (!chunksToLoad.empty() || !chunksToUnload.empty())
         {
             RebuildObjectPositions();
@@ -155,9 +136,7 @@ namespace Genesis
         auto chunk = std::make_unique<Chunk>(chunkX, chunkZ, m_Settings.chunkSize, m_Settings.cellSize);
         float seaLevel = m_Settings.waterEnabled ? m_Settings.seaLevel : -1000.0f;
         
-        // Pass biome generator if enabled
-        BiomeGenerator* biomeGen = m_Settings.biomesEnabled ? &m_BiomeGenerator : nullptr;
-        chunk->Generate(m_Settings.terrainSettings, m_Settings.seed, seaLevel, biomeGen);
+        chunk->Generate(m_Settings.terrainSettings, m_Settings.seed, seaLevel);
         chunk->Upload(*m_Device);
 
         m_LoadedChunks[coord] = std::move(chunk);
@@ -192,7 +171,6 @@ namespace Genesis
 
     void ChunkManager::Render(Renderer &renderer)
     {
-        // First pass: render opaque terrain
         for (const auto &[coord, chunk] : m_LoadedChunks)
         {
             if (chunk->GetState() == ChunkState::Loaded && chunk->GetMesh())
@@ -203,7 +181,6 @@ namespace Genesis
             }
         }
 
-        // Second pass: render transparent water (after opaque objects)
         if (m_Settings.waterEnabled)
         {
             for (const auto &[coord, chunk] : m_LoadedChunks)
@@ -251,7 +228,6 @@ namespace Genesis
     void ChunkManager::SetViewDistance(int distance)
     {
         m_Settings.viewDistance = distance;
-        // Force update on next frame
         m_LastCameraChunk = glm::ivec2(INT_MAX, INT_MAX);
     }
 

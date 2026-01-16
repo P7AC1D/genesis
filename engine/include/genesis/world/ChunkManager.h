@@ -2,7 +2,6 @@
 
 #include "genesis/world/Chunk.h"
 #include "genesis/procedural/TerrainGenerator.h"
-#include "genesis/procedural/Biome.h"
 #include <glm/glm.hpp>
 #include <unordered_map>
 #include <memory>
@@ -26,12 +25,7 @@ namespace Genesis {
         float seaLevel = 2.0f;        // Height of water surface
         bool waterEnabled = true;
         
-        // Biome settings
-        bool biomesEnabled = true;
-        float temperatureScale = 0.002f;  // Biome transition scale
-        float moistureScale = 0.003f;
-        
-        // Terrain settings (applied to all chunks)
+        // Terrain settings
         TerrainSettings terrainSettings;
     };
 
@@ -75,35 +69,22 @@ namespace Genesis {
         const std::vector<glm::vec3>& GetAllRockPositions() const { return m_AllRockPositions; }
 
     private:
-        // Convert world position to chunk coordinate
         glm::ivec2 WorldToChunkCoord(float worldX, float worldZ) const;
-        
-        // Convert chunk coordinate to world position (chunk origin)
         glm::vec3 ChunkCoordToWorld(int chunkX, int chunkZ) const;
-
-        // Load/unload chunks
         void LoadChunk(int chunkX, int chunkZ);
         void UnloadChunk(int chunkX, int chunkZ);
-        
-        // Rebuild object position lists after chunk changes
         void RebuildObjectPositions();
 
     private:
         VulkanDevice* m_Device = nullptr;
         WorldSettings m_Settings;
-        BiomeGenerator m_BiomeGenerator;
 
-        // Currently loaded chunks (key = chunk coordinate)
         std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, ChunkCoordHash> m_LoadedChunks;
-
-        // Last camera chunk position (to detect when to update)
         glm::ivec2 m_LastCameraChunk{INT_MAX, INT_MAX};
 
-        // Cached object positions from all loaded chunks
         std::vector<glm::vec3> m_AllTreePositions;
         std::vector<glm::vec3> m_AllRockPositions;
         
-        // Terrain transform (for centering - chunks handle their own offset)
         glm::mat4 m_TerrainTransform{1.0f};
     };
 

@@ -1,4 +1,4 @@
-#include "PlaygroundApp.h"
+#include "TerragenApp.h"
 
 int main(int argc, char** argv) {
     auto app = Genesis::CreateApplication(argc, argv);

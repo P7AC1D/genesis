@@ -24,9 +24,9 @@ genesis/
 │   │   └── Panels/        # UI panels (Hierarchy, Properties, etc.)
 │   └── assets/            # Editor-specific assets
 │
-├── playground/             # Feature testing sandbox
-│   ├── src/               # Playground application
-│   └── assets/            # Test assets and shaders
+├── terragen/               # Terrain generation sandbox
+│   ├── src/               # Terragen application
+│   └── assets/            # Shaders and test assets
 │
 └── cmake/                  # CMake modules
 ```
@@ -45,7 +45,7 @@ genesis/
 - **Low-Poly Mesh Generation**: Built-in primitives (cube, plane, icosphere)
 - **Procedural Meshes**: Trees, rocks with flat shading for low-poly style
 - **Camera System**: FPS-style camera with perspective projection
-- **Push Constants**: Per-object transforms for efficient rendering
+- **Water Rendering**: Transparent water with wave animation and fresnel effect
 
 ### Lighting System
 - **Directional Light (Sun)**: With time-of-day simulation
@@ -56,9 +56,9 @@ genesis/
 
 ### Procedural Generation
 - **Simplex Noise**: 2D/3D noise with FBM and ridge noise variants
+- **Domain Warping**: Multi-level coordinate warping for organic terrain
 - **Terrain Generator**: Heightmap-based terrain with configurable parameters
-- **Height-Based Coloring**: Water, sand, grass, rock, snow biome colors
-- **Flat Shading**: Per-face normals for low-poly aesthetic
+- **Height-Based Coloring**: Water, sand, grass, rock, snow colors
 
 ### Chunk-Based World System
 - **Infinite Terrain**: Dynamic chunk loading/unloading
@@ -72,11 +72,11 @@ genesis/
 - **Viewport Panel**: 3D scene view
 - **Asset Browser**: Project file navigation
 
-### Playground
+### Terragen
 - **WASD Camera Controller**: Free-fly camera with mouse look
-- **Chunk World**: 7x7 chunk grid (224x224 world units)
+- **Chunk World**: 7x7 chunk grid with procedural terrain
 - **Dynamic Lighting**: Time-of-day controls
-- **Feature Testing**: Sandbox for developing new features
+- **Water Rendering**: Sea level with animated waves
 
 ## Controls
 
@@ -113,8 +113,8 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 # Build all targets
 cmake --build build
 
-# Run playground
-./build/playground/GenesisPlayground
+# Run terragen
+./build/terragen/Terragen
 ```
 
 ### macOS with MoltenVK (Homebrew)
@@ -124,14 +124,17 @@ cmake --build build
 export VK_ICD_FILENAMES=/opt/homebrew/etc/vulkan/icd.d/MoltenVK_icd.json
 export DYLD_LIBRARY_PATH=/opt/homebrew/lib
 
-./build/playground/GenesisPlayground
+./build/terragen/Terragen
+
+# Or use the convenience target
+cmake --build build --target run_terragen
 ```
 
 ### Build Options
 
 ```cmake
-GENESIS_BUILD_EDITOR=ON      # Build the editor (default: ON)
-GENESIS_BUILD_PLAYGROUND=ON  # Build the playground (default: ON)
+GENESIS_BUILD_EDITOR=ON     # Build the editor (default: ON)
+GENESIS_BUILD_TERRAGEN=ON   # Build the terragen app (default: ON)
 ```
 
 ## Usage
@@ -162,48 +165,23 @@ Genesis::Application* Genesis::CreateApplication(int argc, char** argv) {
 }
 ```
 
-### Creating Low-Poly Meshes
-
-```cpp
-auto& device = Application::Get().GetRenderer().GetDevice();
-
-auto cube = Mesh::CreateCube(device, {1.0f, 0.0f, 0.0f});  // Red cube
-auto tree = Mesh::CreateLowPolyTree(device);
-auto rock = Mesh::CreateLowPolyRock(device);
-```
-
-### Procedural Terrain
-
-```cpp
-TerrainSettings settings;
-settings.width = 64;
-settings.depth = 64;
-settings.heightScale = 8.0f;
-settings.noiseScale = 0.04f;
-settings.octaves = 5;
-settings.flatShading = true;
-settings.useHeightColors = true;
-
-TerrainGenerator generator(settings);
-auto terrainMesh = generator.Generate();
-```
-
-### Chunk-Based World
+### Terrain Generation
 
 ```cpp
 WorldSettings worldSettings;
 worldSettings.chunkSize = 32;
-worldSettings.viewDistance = 3;  // 7x7 chunks
-worldSettings.seed = 42;
+worldSettings.cellSize = 1.0f;
+worldSettings.viewDistance = 3;
+
+// Configure terrain settings
+worldSettings.terrainSettings.heightScale = 10.0f;
+worldSettings.terrainSettings.noiseScale = 0.03f;
+worldSettings.terrainSettings.octaves = 5;
+worldSettings.terrainSettings.persistence = 0.5f;
+worldSettings.terrainSettings.useWarp = true;  // Domain warping
 
 ChunkManager chunkManager;
 chunkManager.Initialize(device, worldSettings);
-
-// In update loop:
-chunkManager.Update(cameraPosition);
-
-// In render loop:
-chunkManager.Render(renderer);
 ```
 
 ### Lighting
@@ -240,14 +218,13 @@ Application Loop:
     5. Renderer::EndFrame()
 ```
 
-### Renderer Pipeline
+### Terrain Generation Pipeline
 
 ```
-VulkanContext → VulkanDevice → VulkanSwapchain → VulkanPipeline
-                                                        ↓
-                                                  Command Buffer
-                                                        ↓
-                                    BeginScene(camera) → Draw(mesh, transform) → EndScene()
+1. FBM Noise             → Base terrain shape
+2. Domain Warping        → Organic, non-uniform features
+3. Height Coloring       → Water, sand, grass, rock, snow
+4. Mesh Generation       → Flat-shaded triangles
 ```
 
 ### Chunk System
@@ -257,33 +234,17 @@ ChunkManager::Update(cameraPosition)
     ↓
 Determine visible chunks → Load new chunks → Unload distant chunks
     ↓
-Chunk::Generate() → Noise sampling → Mesh generation → GPU upload
+Chunk::Generate() → Heightmap → Mesh generation → Object placement
 ```
 
-## Roadmap
+## Next Steps
 
-### Completed
-- [x] Vulkan rendering pipeline with synchronization
-- [x] FPS camera with WASD controls
-- [x] Procedural terrain generation with simplex noise
-- [x] Chunk-based infinite world system
-- [x] Lighting system with time-of-day
-- [x] Point lights and fog
-
-### Next Steps
-- [x] **Water Rendering**: Flat water plane with transparency/reflection
-- [x] **Biome System**: Different terrain parameters based on world position
-- [ ] **ImGui Integration**: Debug overlay with FPS, stats, and controls
-- [ ] **Object Variation**: Random scale/rotation for trees and rocks
-- [ ] **Shadow Mapping**: Basic directional light shadows
-
-### Future
-- [ ] Scene serialization/loading
-- [ ] Physics integration
-- [ ] Audio system
-- [ ] More procedural objects (buildings, vegetation)
-- [ ] Chunk LOD system
-- [ ] Multithreaded chunk generation
+Planned improvements for the terrain system:
+1. **Ridge Noise** - Sharp mountain crests and spines
+2. **Tectonic Uplift Mask** - Mountain ranges in bands
+3. **Hydraulic Erosion** - Valleys and drainage patterns
+4. **Biome System** - Climate-based terrain variation
+5. **LOD System** - Level of detail for distant terrain
 
 ## License
 

@@ -6,10 +6,10 @@ namespace Genesis {
 
     class Sandbox;
 
-    class PlaygroundApp : public Application {
+    class TerragenApp : public Application {
     public:
-        PlaygroundApp(const ApplicationConfig& config);
-        ~PlaygroundApp() override;
+        TerragenApp(const ApplicationConfig& config);
+        ~TerragenApp() override;
 
     protected:
         void OnInit() override;

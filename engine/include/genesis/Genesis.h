@@ -23,7 +23,6 @@
 #include "genesis/procedural/Noise.h"
 #include "genesis/procedural/TerrainGenerator.h"
 #include "genesis/procedural/Water.h"
-#include "genesis/procedural/Biome.h"
 
 // World
 #include "genesis/world/Chunk.h"

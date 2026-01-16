@@ -7,7 +7,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Build options
 option(GENESIS_BUILD_EDITOR "Build the Genesis Editor" ON)
-option(GENESIS_BUILD_PLAYGROUND "Build the Genesis Playground" ON)
+option(GENESIS_BUILD_TERRAGEN "Build the Terragen terrain generator" ON)
 
 # Platform detection
 if(WIN32)
@@ -38,7 +38,7 @@ if(GENESIS_BUILD_EDITOR)
     add_subdirectory(editor)
 endif()
 
-# Playground application
-if(GENESIS_BUILD_PLAYGROUND)
-    add_subdirectory(playground)
+# Terragen application
+if(GENESIS_BUILD_TERRAGEN)
+    add_subdirectory(terragen)
 endif()
