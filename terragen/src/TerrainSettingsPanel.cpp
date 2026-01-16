@@ -250,6 +250,13 @@ namespace Genesis
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("Spacing of ridge lines.\nLower = wider mountain spines; higher = tighter, more frequent ridges.");
 
+                if (ImGui::SliderFloat("Peak Boost", &m_TerrainSettings.peakBoost, 0.0f, 1.0f, "%.2f"))
+                {
+                    m_NeedsPreviewUpdate = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Extra sharpening at mountain peaks (pow4 ridge boost).\nAdds dramatic pointed summits to the highest ridges.");
+
                 ImGui::Separator();
                 ImGui::Text("Tectonic Uplift Mask");
 
@@ -513,9 +520,19 @@ namespace Genesis
                     float ridgeContribution = ridgeNoise * m_TerrainSettings.ridgeWeight * upliftMask;
                     float baseWeight = 1.0f - (m_TerrainSettings.ridgeWeight * upliftMask);
                     height = height * baseWeight + ridgeContribution;
+
+                    // Ridge peak sharpening - extra boost at peaks
+                    height += std::pow(ridgeNoise, 4.0f) * m_TerrainSettings.peakBoost * upliftMask;
                 }
 
+                // Normalize to [0,1]
                 height = (height + 1.0f) * 0.5f;
+
+                // Height-dependent shaping: sharp tops, soft bases
+                float heightNorm = std::clamp(height, 0.0f, 1.0f);
+                float shapeFactor = 1.0f - 0.4f * heightNorm; // lerp(1.0, 0.6, h)
+                height *= shapeFactor;
+
                 height = m_TerrainSettings.baseHeight + height * m_TerrainSettings.heightScale;
 
                 heightData[y * PREVIEW_SIZE + x] = height;

@@ -36,6 +36,7 @@ namespace Genesis
         float ridgeWeight = 0.7f;  // Blend weight (0 = all base, 1 = all ridge)
         float ridgePower = 2.0f;   // Sharpness exponent (higher = sharper peaks)
         float ridgeScale = 1.0f;   // Scale multiplier for ridge noise
+        float peakBoost = 0.3f;    // Extra sharpening at mountain peaks (pow4 ridge boost)
 
         // Tectonic uplift mask - controls where mountains appear
         bool useUpliftMask = true;        // Enable uplift mask for realistic mountain bands

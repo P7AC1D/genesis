@@ -166,9 +166,20 @@ namespace Genesis
                     float ridgeContribution = ridgeNoise * settings.ridgeWeight * upliftMask;
                     float baseWeight = 1.0f - (settings.ridgeWeight * upliftMask);
                     height = height * baseWeight + ridgeContribution;
+
+                    // Ridge peak sharpening - extra boost at peaks
+                    height += std::pow(ridgeNoise, 4.0f) * settings.peakBoost * upliftMask;
                 }
 
+                // Normalize to [0,1]
                 height = (height + 1.0f) * 0.5f;
+
+                // Height-dependent shaping: sharp tops, soft bases
+                // lerp(1.0, 0.6, heightNorm) softens lower elevations
+                float heightNorm = std::clamp(height, 0.0f, 1.0f);
+                float shapeFactor = 1.0f - 0.4f * heightNorm; // lerp(1.0, 0.6, h)
+                height *= shapeFactor;
+
                 heightmap[z * width + x] = settings.baseHeight + height * settings.heightScale;
             }
         }
