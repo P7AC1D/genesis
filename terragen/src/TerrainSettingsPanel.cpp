@@ -57,6 +57,8 @@ namespace Genesis
         ImGui::Separator();
         RenderWarpingSection();
         ImGui::Separator();
+        RenderErosionSection();
+        ImGui::Separator();
         RenderColorSection();
         ImGui::Separator();
         RenderWaterSection();
@@ -343,6 +345,78 @@ namespace Genesis
         }
     }
 
+    void TerrainSettingsPanel::RenderErosionSection()
+    {
+        if (ImGui::CollapsingHeader("Erosion"))
+        {
+            ImGui::TextWrapped("Simulates weathering and water flow to add natural erosion patterns.");
+            ImGui::Spacing();
+
+            if (ImGui::Checkbox("Enable Erosion", &m_TerrainSettings.useErosion))
+            {
+                m_NeedsPreviewUpdate = true;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Applies erosion post-processing to terrain heights.\nErodes steep slopes and deepens valleys.");
+
+            if (m_TerrainSettings.useErosion)
+            {
+                ImGui::Text("Slope-Based Erosion:");
+                if (ImGui::SliderFloat("Erosion Strength", &m_TerrainSettings.slopeErosionStrength, 0.0f, 1.0f, "%.2f"))
+                {
+                    m_NeedsPreviewUpdate = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("How aggressively steep slopes are eroded.\nHigher = more material removed from cliffs and ridges.");
+
+                if (ImGui::SliderFloat("Slope Threshold", &m_TerrainSettings.slopeThreshold, 0.0f, 2.0f, "%.2f"))
+                {
+                    m_NeedsPreviewUpdate = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Minimum slope angle before erosion kicks in.\nLower = even gentle hills erode; higher = only steep cliffs erode.");
+
+                if (ImGui::SliderFloat("Valley Depth", &m_TerrainSettings.valleyDepth, 0.0f, 1.0f, "%.2f"))
+                {
+                    m_NeedsPreviewUpdate = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Deepens low-lying areas where water would collect.\nCreates river valleys and gullies.");
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Text("Hydraulic Erosion (Advanced):");
+
+                ImGui::Checkbox("Enable Hydraulic Erosion", &m_TerrainSettings.useHydraulicErosion);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Simulates water droplets carrying sediment.\nMore realistic but slower; only applied to world chunks.");
+
+                if (m_TerrainSettings.useHydraulicErosion)
+                {
+                    ImGui::SliderInt("Iterations", &m_TerrainSettings.erosionIterations, 10, 500);
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Number of water droplets simulated per chunk.\nMore iterations = smoother, more natural erosion.");
+
+                    ImGui::SliderFloat("Inertia", &m_TerrainSettings.erosionInertia, 0.0f, 0.5f, "%.3f");
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("How much droplets resist direction changes.\nHigher = longer, straighter flow paths.");
+
+                    ImGui::SliderFloat("Sediment Capacity", &m_TerrainSettings.erosionCapacity, 1.0f, 10.0f, "%.1f");
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Max sediment a droplet can carry.\nHigher = deeper cuts in steep terrain.");
+
+                    ImGui::SliderFloat("Deposition Rate", &m_TerrainSettings.erosionDeposition, 0.0f, 1.0f, "%.2f");
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("How quickly sediment drops in flat areas.\nHigher = more sediment fans and alluvial deposits.");
+
+                    ImGui::SliderFloat("Evaporation Rate", &m_TerrainSettings.erosionEvaporation, 0.0f, 0.1f, "%.3f");
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("How quickly droplets lose water and stop.\nHigher = shorter flow paths.");
+                }
+            }
+        }
+    }
+
     void TerrainSettingsPanel::UpdateHeightmapPreview()
     {
         if (!m_HeightmapTexture || !m_HeightmapTexture->IsValid())
@@ -351,8 +425,6 @@ namespace Genesis
         SimplexNoise noise(m_Seed);
 
         std::vector<float> heightData(PREVIEW_SIZE * PREVIEW_SIZE);
-        float minHeight = std::numeric_limits<float>::max();
-        float maxHeight = std::numeric_limits<float>::lowest();
 
         for (int y = 0; y < PREVIEW_SIZE; y++)
         {
@@ -447,9 +519,59 @@ namespace Genesis
                 height = m_TerrainSettings.baseHeight + height * m_TerrainSettings.heightScale;
 
                 heightData[y * PREVIEW_SIZE + x] = height;
-                minHeight = std::min(minHeight, height);
-                maxHeight = std::max(maxHeight, height);
             }
+        }
+
+        // Apply slope-based erosion post-processing
+        if (m_TerrainSettings.useErosion)
+        {
+            std::vector<float> eroded = heightData;
+
+            for (int y = 1; y < PREVIEW_SIZE - 1; y++)
+            {
+                for (int x = 1; x < PREVIEW_SIZE - 1; x++)
+                {
+                    int idx = y * PREVIEW_SIZE + x;
+                    float h = heightData[idx];
+
+                    // Calculate slope from 4-connected neighbors
+                    float hL = heightData[idx - 1];
+                    float hR = heightData[idx + 1];
+                    float hU = heightData[idx - PREVIEW_SIZE];
+                    float hD = heightData[idx + PREVIEW_SIZE];
+
+                    float slope = std::max({std::abs(h - hL),
+                                            std::abs(h - hR),
+                                            std::abs(h - hU),
+                                            std::abs(h - hD)});
+
+                    // Erode steep slopes
+                    if (slope > m_TerrainSettings.slopeThreshold)
+                    {
+                        float erosionFactor = (slope - m_TerrainSettings.slopeThreshold) * m_TerrainSettings.slopeErosionStrength;
+                        eroded[idx] = h - erosionFactor;
+                    }
+
+                    // Valley deepening based on local minimum detection
+                    float avgNeighbor = (hL + hR + hU + hD) * 0.25f;
+                    if (h < avgNeighbor)
+                    {
+                        float valleyFactor = (avgNeighbor - h) * m_TerrainSettings.valleyDepth;
+                        eroded[idx] -= valleyFactor;
+                    }
+                }
+            }
+
+            heightData = eroded;
+        }
+
+        // Calculate min/max heights
+        float minHeight = std::numeric_limits<float>::max();
+        float maxHeight = std::numeric_limits<float>::lowest();
+        for (float h : heightData)
+        {
+            minHeight = std::min(minHeight, h);
+            maxHeight = std::max(maxHeight, h);
         }
 
         m_HeightmapTexture->Update(heightData, minHeight, maxHeight);

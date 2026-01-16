@@ -173,6 +173,143 @@ namespace Genesis
             }
         }
 
+        // Apply erosion effects
+        if (settings.useErosion)
+        {
+            // Cheap erosion: slope-based shaping and valley deepening
+            std::vector<float> erodedHeightmap = heightmap;
+
+            for (int z = 1; z < depth - 1; z++)
+            {
+                for (int x = 1; x < width - 1; x++)
+                {
+                    int idx = z * width + x;
+                    float h = heightmap[idx];
+
+                    // Calculate slope from neighbors
+                    float hL = heightmap[idx - 1];
+                    float hR = heightmap[idx + 1];
+                    float hU = heightmap[(z - 1) * width + x];
+                    float hD = heightmap[(z + 1) * width + x];
+
+                    float slopeX = (hR - hL) / (2.0f * settings.cellSize);
+                    float slopeZ = (hD - hU) / (2.0f * settings.cellSize);
+                    float slope = std::sqrt(slopeX * slopeX + slopeZ * slopeZ);
+
+                    // Slope erosion: steep areas erode faster
+                    if (slope > settings.slopeThreshold)
+                    {
+                        float erosionFactor = 1.0f - settings.slopeErosionStrength *
+                                                         std::min(1.0f, (slope - settings.slopeThreshold) / settings.slopeThreshold);
+                        h *= erosionFactor;
+                    }
+
+                    // Valley deepening: areas lower than neighbors carve deeper
+                    float avgNeighbor = (hL + hR + hU + hD) * 0.25f;
+                    if (h < avgNeighbor)
+                    {
+                        float valleyFactor = (avgNeighbor - h) / settings.heightScale;
+                        h -= valleyFactor * settings.valleyDepth * settings.heightScale;
+                    }
+
+                    erodedHeightmap[idx] = h;
+                }
+            }
+
+            heightmap = erodedHeightmap;
+
+            // Hydraulic erosion: particle-based simulation
+            if (settings.useHydraulicErosion && settings.erosionIterations > 0)
+            {
+                std::mt19937 rng(worldSeed + static_cast<uint32_t>(offsetX * 1000 + offsetZ));
+                std::uniform_real_distribution<float> distX(1.0f, static_cast<float>(width - 2));
+                std::uniform_real_distribution<float> distZ(1.0f, static_cast<float>(depth - 2));
+
+                for (int iter = 0; iter < settings.erosionIterations; iter++)
+                {
+                    // Spawn water droplet at random position
+                    float dropX = distX(rng);
+                    float dropZ = distZ(rng);
+                    float dirX = 0.0f;
+                    float dirZ = 0.0f;
+                    float speed = 1.0f;
+                    float water = 1.0f;
+                    float sediment = 0.0f;
+
+                    for (int step = 0; step < 64; step++)
+                    {
+                        int cellX = static_cast<int>(dropX);
+                        int cellZ = static_cast<int>(dropZ);
+
+                        if (cellX < 1 || cellX >= width - 1 || cellZ < 1 || cellZ >= depth - 1)
+                            break;
+
+                        int idx = cellZ * width + cellX;
+
+                        // Calculate gradient
+                        float hL = heightmap[idx - 1];
+                        float hR = heightmap[idx + 1];
+                        float hU = heightmap[(cellZ - 1) * width + cellX];
+                        float hD = heightmap[(cellZ + 1) * width + cellX];
+                        float hC = heightmap[idx];
+
+                        float gradX = (hR - hL) * 0.5f;
+                        float gradZ = (hD - hU) * 0.5f;
+
+                        // Update direction with inertia
+                        dirX = dirX * settings.erosionInertia - gradX * (1.0f - settings.erosionInertia);
+                        dirZ = dirZ * settings.erosionInertia - gradZ * (1.0f - settings.erosionInertia);
+
+                        // Normalize direction
+                        float len = std::sqrt(dirX * dirX + dirZ * dirZ);
+                        if (len < 0.0001f)
+                            break;
+                        dirX /= len;
+                        dirZ /= len;
+
+                        // Move droplet
+                        float newX = dropX + dirX;
+                        float newZ = dropZ + dirZ;
+
+                        int newCellX = static_cast<int>(newX);
+                        int newCellZ = static_cast<int>(newZ);
+                        if (newCellX < 1 || newCellX >= width - 1 || newCellZ < 1 || newCellZ >= depth - 1)
+                            break;
+
+                        float newH = heightmap[newCellZ * width + newCellX];
+                        float deltaH = newH - hC;
+
+                        // Calculate sediment capacity
+                        float capacity = std::max(-deltaH, 0.01f) * speed * water * settings.erosionCapacity;
+
+                        if (sediment > capacity || deltaH > 0)
+                        {
+                            // Deposit sediment
+                            float depositAmount = (deltaH > 0) ? std::min(deltaH, sediment) : (sediment - capacity) * settings.erosionDeposition;
+                            sediment -= depositAmount;
+                            heightmap[idx] += depositAmount;
+                        }
+                        else
+                        {
+                            // Erode terrain
+                            float erodeAmount = std::min((capacity - sediment) * 0.3f, -deltaH);
+                            sediment += erodeAmount;
+                            heightmap[idx] -= erodeAmount;
+                        }
+
+                        // Update droplet state
+                        dropX = newX;
+                        dropZ = newZ;
+                        speed = std::sqrt(std::max(0.0f, speed * speed + deltaH));
+                        water *= (1.0f - settings.erosionEvaporation);
+
+                        if (water < 0.01f)
+                            break;
+                    }
+                }
+            }
+        }
+
         // Height range for color normalization
         float minHeight = settings.baseHeight;
         float maxHeight = settings.baseHeight + settings.heightScale;

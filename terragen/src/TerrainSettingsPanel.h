@@ -28,6 +28,7 @@ namespace Genesis
         void RenderNoiseSection();
         void RenderRidgeNoiseSection();
         void RenderWarpingSection();
+        void RenderErosionSection();
         void RenderColorSection();
         void RenderWaterSection();
         void RenderPreviewSection();

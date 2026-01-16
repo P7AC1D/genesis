@@ -44,6 +44,20 @@ namespace Genesis
         float upliftThresholdHigh = 0.7f; // Above this = full mountains
         float upliftPower = 1.5f;         // Sharpening power for uplift transitions
 
+        // Erosion settings
+        bool useErosion = true;             // Enable erosion effects
+        float slopeErosionStrength = 0.15f; // How much steep slopes erode (0-1)
+        float slopeThreshold = 0.5f;        // Slope angle threshold for erosion
+        float valleyDepth = 0.3f;           // How deep valleys carve (0-1)
+
+        // Hydraulic erosion (higher quality, slower)
+        bool useHydraulicErosion = false; // Enable particle-based erosion
+        int erosionIterations = 100;      // Number of water droplet simulations
+        float erosionInertia = 0.05f;     // How much droplets maintain direction
+        float erosionCapacity = 4.0f;     // Sediment carrying capacity
+        float erosionDeposition = 0.3f;   // Rate of sediment deposition
+        float erosionEvaporation = 0.02f; // Water evaporation rate
+
         // Low-poly style
         bool flatShading = true; // Use face normals instead of smooth normals
 
