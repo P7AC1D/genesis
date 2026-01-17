@@ -116,60 +116,70 @@ namespace Genesis
 
     void TerrainGenerator::ApplySlopeErosion(std::vector<float> &heightmap, int width, int depth) const
     {
-        std::vector<float> eroded = heightmap;
+        // Simple smoothing-based erosion that doesn't create artifacts
+        // Uses Laplacian smoothing weighted by slope
 
-        for (int z = 1; z < depth - 1; z++)
+        std::vector<float> smoothed(heightmap.size());
+
+        // Multiple passes for gradual erosion
+        int passes = static_cast<int>(m_Settings.slopeErosionStrength * 3.0f) + 1;
+
+        for (int pass = 0; pass < passes; pass++)
         {
-            for (int x = 1; x < width - 1; x++)
+            // Copy current state
+            for (size_t i = 0; i < heightmap.size(); i++)
             {
-                int idx = z * width + x;
-                float h = heightmap[idx];
+                smoothed[i] = heightmap[i];
+            }
 
-                // Calculate slope from 4-connected neighbors
-                float hL = heightmap[idx - 1];
-                float hR = heightmap[idx + 1];
-                float hU = heightmap[(z - 1) * width + x];
-                float hD = heightmap[(z + 1) * width + x];
-
-                float slopeX = (hR - hL) / (2.0f * m_Settings.cellSize);
-                float slopeZ = (hD - hU) / (2.0f * m_Settings.cellSize);
-                float slope = std::sqrt(slopeX * slopeX + slopeZ * slopeZ);
-
-                // Mass-conserving slope erosion: move material downhill instead of destroying it
-                if (slope > m_Settings.slopeThreshold)
+            for (int z = 1; z < depth - 1; z++)
+            {
+                for (int x = 1; x < width - 1; x++)
                 {
-                    float erosionAmount = m_Settings.slopeErosionStrength *
-                                          std::min(1.0f, (slope - m_Settings.slopeThreshold) / m_Settings.slopeThreshold) *
-                                          m_Settings.heightScale * 0.1f;
+                    int idx = z * width + x;
+                    float h = heightmap[idx];
 
-                    // Find lowest neighbor to deposit material
-                    float minNeighbor = std::min({hL, hR, hU, hD});
-                    int lowestIdx = idx;
-                    if (minNeighbor == hL)
-                        lowestIdx = idx - 1;
-                    else if (minNeighbor == hR)
-                        lowestIdx = idx + 1;
-                    else if (minNeighbor == hU)
-                        lowestIdx = (z - 1) * width + x;
-                    else if (minNeighbor == hD)
-                        lowestIdx = (z + 1) * width + x;
+                    // Get neighbors
+                    float hL = heightmap[idx - 1];
+                    float hR = heightmap[idx + 1];
+                    float hU = heightmap[(z - 1) * width + x];
+                    float hD = heightmap[(z + 1) * width + x];
 
-                    // Move material downhill (mass-conserving)
-                    eroded[idx] -= erosionAmount * 0.5f;
-                    eroded[lowestIdx] += erosionAmount * 0.5f;
-                }
+                    // Calculate slope magnitude
+                    float slopeX = (hR - hL) / (2.0f * m_Settings.cellSize);
+                    float slopeZ = (hD - hU) / (2.0f * m_Settings.cellSize);
+                    float slope = std::sqrt(slopeX * slopeX + slopeZ * slopeZ);
 
-                // Valley deepening: areas lower than neighbors carve deeper
-                float avgNeighbor = (hL + hR + hU + hD) * 0.25f;
-                if (h < avgNeighbor)
-                {
-                    float valleyFactor = (avgNeighbor - h) / m_Settings.heightScale;
-                    eroded[idx] -= valleyFactor * m_Settings.valleyDepth * m_Settings.heightScale;
+                    // Average of neighbors (Laplacian target)
+                    float avg = (hL + hR + hU + hD) * 0.25f;
+
+                    // Erosion factor based on slope (steep areas erode more)
+                    float slopeFactor = std::min(1.0f, slope / 2.0f);
+
+                    // Blend toward average proportional to slope
+                    // Only erode downward (don't raise cells)
+                    if (avg < h)
+                    {
+                        float erosionRate = slopeFactor * m_Settings.slopeErosionStrength * 0.15f;
+                        smoothed[idx] = h + (avg - h) * erosionRate;
+                    }
+
+                    // Optional valley deepening (very gentle)
+                    if (m_Settings.valleyDepth > 0.0f && h < avg)
+                    {
+                        // Already in a valley - deepen slightly
+                        float valleyFactor = std::min(0.1f, (avg - h) / m_Settings.heightScale);
+                        smoothed[idx] -= valleyFactor * m_Settings.valleyDepth * 0.5f;
+                    }
                 }
             }
-        }
 
-        heightmap = eroded;
+            // Copy back
+            for (size_t i = 0; i < heightmap.size(); i++)
+            {
+                heightmap[i] = smoothed[i];
+            }
+        }
     }
 
     float TerrainGenerator::SampleHeightBilinear(const std::vector<float> &heightmap, int width, float x, float z) const
@@ -332,14 +342,27 @@ namespace Genesis
         int width = m_Settings.width + 1;
         int depth = m_Settings.depth + 1;
 
-        // Generate with a 1-cell border for erosion context (allows erosion at chunk edges)
-        constexpr int BORDER = 1;
+        // Border for erosion context - needs to be large enough for erosion to settle
+        // but we'll blend results near edges to ensure seamless boundaries
+        constexpr int BORDER = 8;
+        constexpr int BLEND_ZONE = 6; // Cells from edge where we blend eroded -> raw
         int extWidth = width + 2 * BORDER;
         int extDepth = depth + 2 * BORDER;
 
-        std::vector<float> extHeightmap(extWidth * extDepth);
+        // Step 1: Generate raw heightmap (this is seamless across chunks)
+        std::vector<float> rawHeightmap(width * depth);
+        for (int z = 0; z < depth; z++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                float worldX = offsetX + x * m_Settings.cellSize;
+                float worldZ = offsetZ + z * m_Settings.cellSize;
+                rawHeightmap[z * width + x] = SampleRawHeight(worldX, worldZ);
+            }
+        }
 
-        // Step 1: Generate extended heightmap with border for erosion context
+        // Step 2: Generate extended heightmap for erosion processing
+        std::vector<float> extHeightmap(extWidth * extDepth);
         for (int z = 0; z < extDepth; z++)
         {
             for (int x = 0; x < extWidth; x++)
@@ -348,12 +371,11 @@ namespace Genesis
                 float localZ = (z - BORDER) * m_Settings.cellSize;
                 float worldX = offsetX + localX;
                 float worldZ = offsetZ + localZ;
-
                 extHeightmap[z * extWidth + x] = SampleRawHeight(worldX, worldZ);
             }
         }
 
-        // Step 2: Apply erosion effects on extended heightmap
+        // Step 3: Apply erosion effects on extended heightmap
         if (m_Settings.useErosion)
         {
             ApplySlopeErosion(extHeightmap, extWidth, extDepth);
@@ -364,19 +386,35 @@ namespace Genesis
             }
         }
 
-        // Step 3: Apply peak shaping on extended heightmap (after erosion)
-        ApplyPeakShaping(extHeightmap, extWidth, extDepth);
-
-        // Step 4: Extract the actual chunk heightmap (trim border)
+        // Step 4: Extract eroded chunk and blend with raw near edges
+        // This ensures chunk boundaries are seamless (raw terrain is seamless)
         m_CachedHeightmap.resize(width * depth);
         for (int z = 0; z < depth; z++)
         {
             for (int x = 0; x < width; x++)
             {
                 int extIdx = (z + BORDER) * extWidth + (x + BORDER);
-                m_CachedHeightmap[z * width + x] = extHeightmap[extIdx];
+                float erodedH = extHeightmap[extIdx];
+                float rawH = rawHeightmap[z * width + x];
+
+                // Calculate distance from nearest edge (in cells)
+                int distFromEdge = std::min({x, z, (width - 1) - x, (depth - 1) - z});
+
+                // Blend factor: 0 at edge (use raw), 1 in interior (use eroded)
+                float blend = 1.0f;
+                if (distFromEdge < BLEND_ZONE)
+                {
+                    // Smoothstep blend from raw at edge to eroded in interior
+                    float t = static_cast<float>(distFromEdge) / static_cast<float>(BLEND_ZONE);
+                    blend = t * t * (3.0f - 2.0f * t); // Smoothstep
+                }
+
+                m_CachedHeightmap[z * width + x] = rawH * (1.0f - blend) + erodedH * blend;
             }
         }
+
+        // Step 5: Apply peak shaping (operates on final heightmap, is local so no seam issues)
+        ApplyPeakShaping(m_CachedHeightmap, width, depth);
 
         // Store chunk origin for GetHeightAt queries
         m_ChunkOrigin = glm::vec2(offsetX, offsetZ);

@@ -14,8 +14,8 @@ namespace Genesis
              {.continentalScale = 0.8f,
               .elevationRange = 0.9f,
               .mountainCoverage = 0.7f,
-              .mountainSharpness = 0.9f,
-              .ruggedness = 0.6f,
+              .mountainSharpness = 0.8f,
+              .ruggedness = 0.55f,
               .erosionAge = 0.2f,
               .riverStrength = 0.6f,
               .chaos = 0.3f}},
@@ -73,7 +73,7 @@ namespace Genesis
              "Minimal elevation change. Wide open spaces with subtle undulation.",
              {.continentalScale = 0.8f,
               .elevationRange = 0.15f,
-              .mountainCoverage = 0.05f,
+              .mountainCoverage = 0.02f,
               .mountainSharpness = 0.2f,
               .ruggedness = 0.2f,
               .erosionAge = 0.8f,
@@ -141,8 +141,8 @@ namespace Genesis
         // Elevation range: flat (6 units) to extreme (40 units)
         settings.heightScale = Lerp(6.0f, 40.0f, intent.elevationRange);
 
-        // Base height scales slightly with elevation range
-        settings.baseHeight = Lerp(-2.0f, 2.0f, intent.elevationRange * 0.3f);
+        // Base height: neutral offset (amplitude already handled by heightScale)
+        settings.baseHeight = 0.0f;
     }
 
     void TerrainIntentMapper::DeriveNoiseSpectrum(const TerrainIntent &intent, TerrainSettings &settings)
@@ -151,9 +151,13 @@ namespace Genesis
         //   - Octaves: more = finer detail
         //   - Persistence: higher = rougher terrain
         //   - Lacunarity: higher = more small-scale detail per octave
+        //
+        // STABILITY CONSTRAINT: persistence * lacunarity < 1.0
+        // Otherwise noise amplitude grows with each octave instead of shrinking.
+        // With lacunarity range [1.8, 2.4], safe persistence max is ~0.42
 
         settings.octaves = static_cast<int>(Lerp(3.0f, 6.0f, intent.ruggedness));
-        settings.persistence = Lerp(0.35f, 0.6f, intent.ruggedness);
+        settings.persistence = Lerp(0.35f, 0.42f, intent.ruggedness);
         settings.lacunarity = Lerp(1.8f, 2.4f, intent.ruggedness);
     }
 
@@ -167,15 +171,17 @@ namespace Genesis
         settings.ridgeWeight = Saturate(intent.mountainCoverage);
 
         // Sharpness controls the ridge power exponent
-        // Low sharpness = soft, rounded peaks (1.4)
-        // High sharpness = jagged, dramatic peaks (3.8)
-        settings.ridgePower = Lerp(1.4f, 3.8f, intent.mountainSharpness);
+        // Low sharpness = soft, rounded peaks (1.2)
+        // High sharpness = dramatic peaks (2.4) - capped to prevent knife-edge spikes
+        settings.ridgePower = Lerp(1.2f, 2.4f, intent.mountainSharpness);
 
-        // Peak boost adds extra definition to summits
-        settings.peakBoost = intent.mountainSharpness * 0.7f;
+        // Peak boost adds extra definition to summits (reduced to prevent spikes)
+        settings.peakBoost = intent.mountainSharpness * 0.4f;
 
-        // Ridge scale ties to continental scale for coherent mountain ranges
-        settings.ridgeScale = Lerp(0.7f, 1.4f, intent.continentalScale);
+        // Ridge scale ties to continental scale and coverage for coherent mountain ranges
+        // Coverage influence prevents sparse mountain worlds from feeling grid-like
+        float ridgeScaleFactor = 0.7f * intent.continentalScale + 0.3f * intent.mountainCoverage;
+        settings.ridgeScale = Lerp(0.6f, 1.5f, ridgeScaleFactor);
     }
 
     void TerrainIntentMapper::DeriveTectonicUplift(const TerrainIntent &intent, TerrainSettings &settings)
@@ -201,9 +207,12 @@ namespace Genesis
         settings.useWarp = true;
 
         // Chaos controls warp intensity
-        settings.warpStrength = Lerp(0.2f, 1.5f, intent.chaos);
-        settings.warpScale = Lerp(0.3f, 1.2f, intent.chaos);
-        settings.warpLevels = static_cast<int>(Lerp(1.0f, 3.0f, intent.chaos));
+        // Keep warp strength VERY LOW to avoid coordinate folding artifacts (spikes)
+        // Multi-level warping compounds, so we need conservative values
+        // Safe cumulative warp should be < 0.25 in noise space
+        settings.warpStrength = Lerp(0.03f, 0.15f, intent.chaos);
+        settings.warpScale = Lerp(0.3f, 0.6f, intent.chaos);
+        settings.warpLevels = static_cast<int>(Lerp(1.0f, 2.0f, intent.chaos));
     }
 
     void TerrainIntentMapper::DeriveErosion(const TerrainIntent &intent, TerrainSettings &settings)
@@ -248,10 +257,9 @@ namespace Genesis
 
         // Ensure persistence doesn't exceed stable limit relative to lacunarity
         // This prevents noise from blowing up at high octaves
-        // Use a more permissive limit that still prevents instability but allows
-        // the intended persistence range (0.35-0.6) to function correctly
+        // Invariants must only restrict, never expand
         float maxSafePersistence = 0.9f / settings.lacunarity;
-        settings.persistence = std::min(settings.persistence, std::max(0.6f, maxSafePersistence));
+        settings.persistence = std::min(settings.persistence, maxSafePersistence);
 
         // Clamp warp levels to safe range
         settings.warpLevels = std::clamp(settings.warpLevels, 1, 4);
