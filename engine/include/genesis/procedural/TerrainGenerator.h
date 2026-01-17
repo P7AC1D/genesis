@@ -113,9 +113,14 @@ namespace Genesis
         // Build mesh from heightmap
         std::shared_ptr<Mesh> BuildMeshFromHeightmap(const std::vector<float> &heightmap, float offsetX, float offsetZ) const;
 
+        // Bilinear height sampling for hydraulic erosion
+        float SampleHeightBilinear(const std::vector<float> &heightmap, int width, float x, float z) const;
+        glm::vec2 SampleGradientBilinear(const std::vector<float> &heightmap, int width, float x, float z) const;
+
         TerrainSettings m_Settings;
         SimplexNoise m_Noise;
         std::vector<float> m_CachedHeightmap;
+        glm::vec2 m_ChunkOrigin{0.0f, 0.0f}; // World origin of cached heightmap
     };
 
 }
