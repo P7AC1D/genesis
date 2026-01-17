@@ -79,20 +79,39 @@ namespace Genesis
         void SetSettings(const TerrainSettings &settings);
         const TerrainSettings &GetSettings() const { return m_Settings; }
 
-        // Generate terrain mesh
+        // Generate terrain mesh at local origin
         std::shared_ptr<Mesh> Generate();
 
-        // Generate heightmap array
+        // Generate terrain mesh at world offset (for chunked terrain)
+        std::shared_ptr<Mesh> GenerateAtOffset(float offsetX, float offsetZ);
+
+        // Generate heightmap array at local origin
         std::vector<float> GenerateHeightmap();
+
+        // Generate heightmap array at world offset (for chunked terrain)
+        std::vector<float> GenerateHeightmapAtOffset(float offsetX, float offsetZ);
 
         // Get height at world position (for placing objects)
         float GetHeightAt(float worldX, float worldZ) const;
 
+        // Get the cached heightmap (must call GenerateHeightmap first)
+        const std::vector<float> &GetCachedHeightmap() const { return m_CachedHeightmap; }
+
         // Get color for height value
         static glm::vec3 GetHeightColor(float normalizedHeight, const TerrainSettings &settings);
 
+        // Sample raw height at world position (no erosion/shaping)
+        // Useful for querying terrain height before full generation
+        float SampleRawHeight(float worldX, float worldZ) const;
+
     private:
-        float SampleHeight(float x, float z) const;
+        // Apply erosion to heightmap in-place
+        void ApplySlopeErosion(std::vector<float> &heightmap, int width, int depth) const;
+        void ApplyHydraulicErosion(std::vector<float> &heightmap, int width, int depth, float offsetX, float offsetZ) const;
+        void ApplyPeakShaping(std::vector<float> &heightmap, int width, int depth) const;
+
+        // Build mesh from heightmap
+        std::shared_ptr<Mesh> BuildMeshFromHeightmap(const std::vector<float> &heightmap, float offsetX, float offsetZ) const;
 
         TerrainSettings m_Settings;
         SimplexNoise m_Noise;

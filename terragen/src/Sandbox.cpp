@@ -275,10 +275,10 @@ namespace Genesis
         WorldSettings worldSettings;
 
         // Terrain resolution (2x): keep chunk world size the same but increase mesh density.
-        // Old: 32 cells @ 1.0 units/cell => 32 world units/chunk
-        // New: 64 cells @ 0.5 units/cell => 32 world units/chunk
-        static constexpr int kChunkCellsPerSide = 64;
-        static constexpr float kWorldUnitsPerCell = 0.5f;
+        // Old: 64 cells @ 0.5 units/cell => 32 world units/chunk
+        // New: 128 cells @ 0.25 units/cell => 32 world units/chunk
+        static constexpr int kChunkCellsPerSide = 128;
+        static constexpr float kWorldUnitsPerCell = 0.25f;
         worldSettings.chunkSize = kChunkCellsPerSide; // Grid cells per chunk
         worldSettings.cellSize = kWorldUnitsPerCell;  // World units per cell
         worldSettings.viewDistance = 3;               // Load 7x7 chunks

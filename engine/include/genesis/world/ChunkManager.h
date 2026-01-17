@@ -16,9 +16,9 @@ namespace Genesis
     struct WorldSettings
     {
         // Chunk settings
-        int chunkSize = 32;    // Grid cells per chunk side
-        float cellSize = 1.0f; // World units per cell
-        int viewDistance = 3;  // Chunks to load in each direction
+        int chunkSize = 128;    // Grid cells per chunk side
+        float cellSize = 0.25f; // World units per cell
+        int viewDistance = 3;   // Chunks to load in each direction
 
         // World seed
         uint32_t seed = 12345;

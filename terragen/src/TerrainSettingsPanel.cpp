@@ -1,6 +1,6 @@
 #include "TerrainSettingsPanel.h"
 #include "genesis/renderer/VulkanDevice.h"
-#include "genesis/procedural/Noise.h"
+#include "genesis/procedural/TerrainGenerator.h"
 #include "genesis/core/Log.h"
 
 #include <imgui.h>
@@ -25,6 +25,15 @@ namespace Genesis
         m_ViewDistance = worldSettings.viewDistance;
         m_Seed = worldSettings.seed;
 
+        // Initialize with default "Rolling Temperate" preset
+        const auto &presets = TerrainIntentMapper::GetPresets();
+        m_CurrentPresetIndex = 4; // "Rolling Temperate"
+        if (m_CurrentPresetIndex < static_cast<int>(presets.size()))
+        {
+            m_Intent = presets[m_CurrentPresetIndex].intent;
+        }
+        SyncIntentToSettings();
+
         m_HeightmapTexture = std::make_unique<HeightmapTexture>();
         m_HeightmapTexture->Create(device, PREVIEW_SIZE, PREVIEW_SIZE);
 
@@ -44,20 +53,32 @@ namespace Genesis
 
     void TerrainSettingsPanel::Render()
     {
-        ImGui::SetNextWindowSize(ImVec2(350, 700), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(380, 750), ImGuiCond_FirstUseEver);
         ImGui::Begin("Terrain Settings", nullptr, ImGuiWindowFlags_NoCollapse);
 
         RenderPreviewSection();
         ImGui::Separator();
-        RenderTerrainSection();
+
+        // Mode toggle at the top
+        ImGui::Checkbox("Advanced Mode", &m_ShowAdvancedMode);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Toggle between Authoring mode (intent-based, recommended)\nand Advanced mode (raw parameters, expert only).");
+
         ImGui::Separator();
-        RenderNoiseSection();
-        ImGui::Separator();
-        RenderRidgeNoiseSection();
-        ImGui::Separator();
-        RenderWarpingSection();
-        ImGui::Separator();
-        RenderErosionSection();
+
+        if (!m_ShowAdvancedMode)
+        {
+            // Authoring mode: Intent + Presets
+            RenderPresetSection();
+            ImGui::Separator();
+            RenderIntentSection();
+        }
+        else
+        {
+            // Advanced mode: All mechanical parameters
+            RenderAdvancedSection();
+        }
+
         ImGui::Separator();
         RenderColorSection();
         ImGui::Separator();
@@ -80,6 +101,145 @@ namespace Genesis
         }
 
         ImGui::End();
+    }
+
+    void TerrainSettingsPanel::RenderPresetSection()
+    {
+        if (ImGui::CollapsingHeader("Terrain Presets", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            const auto &presets = TerrainIntentMapper::GetPresets();
+
+            // Preset dropdown
+            if (ImGui::BeginCombo("Preset", presets[m_CurrentPresetIndex].name.c_str()))
+            {
+                for (int i = 0; i < static_cast<int>(presets.size()); i++)
+                {
+                    bool isSelected = (m_CurrentPresetIndex == i);
+                    if (ImGui::Selectable(presets[i].name.c_str(), isSelected))
+                    {
+                        m_CurrentPresetIndex = i;
+                        m_Intent = presets[i].intent;
+                        SyncIntentToSettings();
+                        m_NeedsPreviewUpdate = true;
+                    }
+                    if (isSelected)
+                        ImGui::SetItemDefaultFocus();
+
+                    // Show description on hover
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("%s", presets[i].description.c_str());
+                }
+                ImGui::EndCombo();
+            }
+
+            // Show current preset description
+            ImGui::TextWrapped("%s", presets[m_CurrentPresetIndex].description.c_str());
+        }
+    }
+
+    void TerrainSettingsPanel::RenderIntentSection()
+    {
+        if (ImGui::CollapsingHeader("Terrain Intent", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::TextWrapped("These 8 controls define the character of your terrain.\nAll mechanical parameters are derived automatically.");
+            ImGui::Spacing();
+
+            bool changed = false;
+
+            // World-scale structure
+            ImGui::Text("World Structure:");
+            if (ImGui::SliderFloat("Continental Scale", &m_Intent.continentalScale, 0.0f, 1.0f, "%.2f"))
+                changed = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Size of major landmasses.\n0 = small islands\n1 = vast continents");
+
+            if (ImGui::SliderFloat("Elevation Range", &m_Intent.elevationRange, 0.0f, 1.0f, "%.2f"))
+                changed = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Overall height contrast.\n0 = flat terrain\n1 = extreme vertical relief");
+
+            ImGui::Spacing();
+            ImGui::Text("Mountains:");
+            if (ImGui::SliderFloat("Mountain Coverage", &m_Intent.mountainCoverage, 0.0f, 1.0f, "%.2f"))
+                changed = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("What percentage of the world is mountainous.\n0 = plains only\n1 = mountains everywhere");
+
+            if (ImGui::SliderFloat("Mountain Sharpness", &m_Intent.mountainSharpness, 0.0f, 1.0f, "%.2f"))
+                changed = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Peak shape character.\n0 = rounded, ancient hills\n1 = jagged, dramatic peaks");
+
+            ImGui::Spacing();
+            ImGui::Text("Surface Character:");
+            if (ImGui::SliderFloat("Ruggedness", &m_Intent.ruggedness, 0.0f, 1.0f, "%.2f"))
+                changed = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Small-scale surface roughness.\n0 = smooth, gentle terrain\n1 = highly detailed, noisy");
+
+            if (ImGui::SliderFloat("Erosion Age", &m_Intent.erosionAge, 0.0f, 1.0f, "%.2f"))
+                changed = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Degree of weathering.\n0 = young, fresh terrain\n1 = ancient, heavily eroded");
+
+            ImGui::Spacing();
+            ImGui::Text("Hydrology:");
+            if (ImGui::SliderFloat("River Strength", &m_Intent.riverStrength, 0.0f, 1.0f, "%.2f"))
+                changed = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Valley carving dominance.\n0 = weak streams\n1 = dominant river systems");
+
+            ImGui::Spacing();
+            ImGui::Text("Stylistic:");
+            if (ImGui::SliderFloat("Chaos", &m_Intent.chaos, 0.0f, 1.0f, "%.2f"))
+                changed = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Breaks symmetry and predictability.\n0 = orderly, predictable terrain\n1 = wild, chaotic formations");
+
+            if (changed)
+            {
+                SyncIntentToSettings();
+                UpdatePresetSelection();
+                m_NeedsPreviewUpdate = true;
+            }
+
+            // Seed control (independent of intent)
+            ImGui::Spacing();
+            ImGui::Separator();
+            int seed = static_cast<int>(m_Seed);
+            if (ImGui::InputInt("Seed", &seed))
+            {
+                m_Seed = static_cast<uint32_t>(std::max(0, seed));
+                m_NeedsPreviewUpdate = true;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Random seed for generation.\nSame seed + same intent = same world pattern.");
+
+            if (ImGui::SliderInt("View Distance", &m_ViewDistance, 1, 6))
+            {
+                // View distance affects chunk loading, not preview
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("How many chunks load around the camera.\nHigher = see farther but costs performance.");
+        }
+    }
+
+    void TerrainSettingsPanel::RenderAdvancedSection()
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+        ImGui::TextWrapped("ADVANCED MODE: Raw mechanical parameters.\nChanges here may create unrealistic terrain.");
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
+
+        RenderTerrainSection();
+        ImGui::Separator();
+        RenderNoiseSection();
+        ImGui::Separator();
+        RenderRidgeNoiseSection();
+        ImGui::Separator();
+        RenderWarpingSection();
+        ImGui::Separator();
+        RenderErosionSection();
     }
 
     void TerrainSettingsPanel::RenderPreviewSection()
@@ -424,183 +584,47 @@ namespace Genesis
         }
     }
 
+    void TerrainSettingsPanel::SyncIntentToSettings()
+    {
+        m_TerrainSettings = TerrainIntentMapper::DeriveSettings(m_Intent);
+        // Ensure the seed from the panel is propagated to settings
+        // DeriveSettings uses a default seed, so we override it here
+        m_TerrainSettings.seed = m_Seed;
+    }
+
+    void TerrainSettingsPanel::UpdatePresetSelection()
+    {
+        // Check if current intent matches any preset exactly
+        const auto &presets = TerrainIntentMapper::GetPresets();
+        for (int i = 0; i < static_cast<int>(presets.size()) - 1; i++) // Skip "Custom"
+        {
+            if (m_Intent == presets[i].intent)
+            {
+                m_CurrentPresetIndex = i;
+                return;
+            }
+        }
+        // No match found, switch to "Custom"
+        m_CurrentPresetIndex = static_cast<int>(presets.size()) - 1;
+    }
+
     void TerrainSettingsPanel::UpdateHeightmapPreview()
     {
         if (!m_HeightmapTexture || !m_HeightmapTexture->IsValid())
             return;
 
-        SimplexNoise noise(m_Seed);
+        // Use TerrainGenerator as single source of truth for preview generation
+        TerrainSettings previewSettings = m_TerrainSettings;
+        previewSettings.width = PREVIEW_SIZE - 1;
+        previewSettings.depth = PREVIEW_SIZE - 1;
+        previewSettings.cellSize = 2.0f; // Preview cell size for sampling
+        previewSettings.seed = m_Seed;
+        previewSettings.flatShading = true;
 
-        std::vector<float> heightData(PREVIEW_SIZE * PREVIEW_SIZE);
+        TerrainGenerator previewGenerator(previewSettings);
 
-        for (int y = 0; y < PREVIEW_SIZE; y++)
-        {
-            for (int x = 0; x < PREVIEW_SIZE; x++)
-            {
-                float sampleX = static_cast<float>(x) * m_TerrainSettings.noiseScale * 2.0f;
-                float sampleY = static_cast<float>(y) * m_TerrainSettings.noiseScale * 2.0f;
-
-                float height;
-                if (m_TerrainSettings.useWarp)
-                {
-                    height = noise.MultiWarpedFBM(sampleX, sampleY,
-                                                  m_TerrainSettings.octaves,
-                                                  m_TerrainSettings.persistence,
-                                                  m_TerrainSettings.lacunarity,
-                                                  m_TerrainSettings.warpStrength,
-                                                  m_TerrainSettings.warpScale,
-                                                  m_TerrainSettings.warpLevels);
-                }
-                else
-                {
-                    height = noise.FBM(sampleX, sampleY,
-                                       m_TerrainSettings.octaves,
-                                       m_TerrainSettings.persistence,
-                                       m_TerrainSettings.lacunarity);
-                }
-
-                // Blend ridge noise for mountain ranges
-                if (m_TerrainSettings.useRidgeNoise)
-                {
-                    float ridgeCoordX = sampleX;
-                    float ridgeCoordY = sampleY;
-
-                    if (m_TerrainSettings.useWarp && m_TerrainSettings.warpLevels > 0 && m_TerrainSettings.warpStrength > 0.0f)
-                    {
-                        float wx = ridgeCoordX;
-                        float wy = ridgeCoordY;
-
-                        for (int level = 0; level < m_TerrainSettings.warpLevels; level++)
-                        {
-                            float offsetX = 5.2f + level * 17.1f;
-                            float offsetY = 1.3f + level * 31.7f;
-                            float offsetX2 = 9.7f + level * 23.5f;
-                            float offsetY2 = 2.8f + level * 13.9f;
-
-                            float levelWarpStrength = m_TerrainSettings.warpStrength / (1.0f + level * 0.5f);
-                            float levelWarpScale = m_TerrainSettings.warpScale * (1.0f + level * 0.3f);
-
-                            float warpOffsetX = noise.FBM(wx * levelWarpScale + offsetX, wy * levelWarpScale + offsetY, 2, 0.5f, 2.0f) * levelWarpStrength;
-                            float warpOffsetY = noise.FBM(wx * levelWarpScale + offsetX2, wy * levelWarpScale + offsetY2, 2, 0.5f, 2.0f) * levelWarpStrength;
-
-                            wx += warpOffsetX;
-                            wy += warpOffsetY;
-                        }
-
-                        ridgeCoordX = wx;
-                        ridgeCoordY = wy;
-                    }
-
-                    float ridgeSampleX = ridgeCoordX * m_TerrainSettings.ridgeScale;
-                    float ridgeSampleY = ridgeCoordY * m_TerrainSettings.ridgeScale;
-                    float ridgeNoise = noise.RidgeNoise(ridgeSampleX, ridgeSampleY,
-                                                        m_TerrainSettings.octaves,
-                                                        m_TerrainSettings.persistence,
-                                                        m_TerrainSettings.lacunarity);
-                    ridgeNoise = std::pow(ridgeNoise, m_TerrainSettings.ridgePower);
-
-                    // Calculate uplift mask - determines where mountains appear
-                    float upliftMask = 1.0f;
-                    if (m_TerrainSettings.useUpliftMask)
-                    {
-                        float upliftSampleX = static_cast<float>(x) * m_TerrainSettings.upliftScale * 2.0f;
-                        float upliftSampleY = static_cast<float>(y) * m_TerrainSettings.upliftScale * 2.0f;
-                        float upliftNoise = noise.FBM(upliftSampleX, upliftSampleY, 2, 0.5f, 2.0f);
-                        upliftNoise = (upliftNoise + 1.0f) * 0.5f; // Map to [0, 1]
-
-                        // Smoothstep for gradual transition from plains to mountains
-                        float t = (upliftNoise - m_TerrainSettings.upliftThresholdLow) /
-                                  (m_TerrainSettings.upliftThresholdHigh - m_TerrainSettings.upliftThresholdLow);
-                        t = std::clamp(t, 0.0f, 1.0f);
-                        upliftMask = t * t * (3.0f - 2.0f * t); // Smoothstep
-                        upliftMask = std::pow(upliftMask, m_TerrainSettings.upliftPower);
-                    }
-
-                    // Apply uplift mask to ridge contribution
-                    float ridgeContribution = ridgeNoise * m_TerrainSettings.ridgeWeight * upliftMask;
-                    float baseWeight = 1.0f - (m_TerrainSettings.ridgeWeight * upliftMask);
-                    height = height * baseWeight + ridgeContribution;
-                }
-
-                // Normalize to [0,1] and store raw height (shaping applied after erosion)
-                height = (height + 1.0f) * 0.5f;
-                height = m_TerrainSettings.baseHeight + height * m_TerrainSettings.heightScale;
-
-                heightData[y * PREVIEW_SIZE + x] = height;
-            }
-        }
-
-        // Step 5: Apply slope-based erosion post-processing
-        if (m_TerrainSettings.useErosion)
-        {
-            std::vector<float> eroded = heightData;
-
-            for (int y = 1; y < PREVIEW_SIZE - 1; y++)
-            {
-                for (int x = 1; x < PREVIEW_SIZE - 1; x++)
-                {
-                    int idx = y * PREVIEW_SIZE + x;
-                    float h = heightData[idx];
-
-                    // Calculate slope from 4-connected neighbors
-                    float hL = heightData[idx - 1];
-                    float hR = heightData[idx + 1];
-                    float hU = heightData[idx - PREVIEW_SIZE];
-                    float hD = heightData[idx + PREVIEW_SIZE];
-
-                    float slope = std::max({std::abs(h - hL),
-                                            std::abs(h - hR),
-                                            std::abs(h - hU),
-                                            std::abs(h - hD)});
-
-                    // Erode steep slopes
-                    if (slope > m_TerrainSettings.slopeThreshold)
-                    {
-                        float erosionFactor = (slope - m_TerrainSettings.slopeThreshold) * m_TerrainSettings.slopeErosionStrength;
-                        eroded[idx] = h - erosionFactor;
-                    }
-
-                    // Valley deepening based on local minimum detection
-                    float avgNeighbor = (hL + hR + hU + hD) * 0.25f;
-                    if (h < avgNeighbor)
-                    {
-                        float valleyFactor = (avgNeighbor - h) * m_TerrainSettings.valleyDepth;
-                        eroded[idx] -= valleyFactor;
-                    }
-                }
-            }
-
-            heightData = eroded;
-        }
-
-        // Step 6: Apply height-dependent shaping (after erosion)
-        // Sharp peaks, soft bases: lerp(1.0, 0.6, heightNorm) + peak boost
-        {
-            float minH = m_TerrainSettings.baseHeight;
-            float maxH = m_TerrainSettings.baseHeight + m_TerrainSettings.heightScale;
-            float range = maxH - minH;
-
-            for (int y = 0; y < PREVIEW_SIZE; y++)
-            {
-                for (int x = 0; x < PREVIEW_SIZE; x++)
-                {
-                    int idx = y * PREVIEW_SIZE + x;
-                    float h = heightData[idx];
-
-                    // Normalize height to [0,1]
-                    float heightNorm = (range > 0.0f) ? std::clamp((h - minH) / range, 0.0f, 1.0f) : 0.0f;
-
-                    // Soft bases, sharp peaks: multiply by lerp(1.0, 0.6, h)
-                    float shapeFactor = 1.0f - 0.4f * heightNorm;
-                    h = minH + (h - minH) * shapeFactor;
-
-                    // Extra peak sharpening (guide: h += pow(hn, 4) * 0.3)
-                    h += std::pow(heightNorm, 4.0f) * m_TerrainSettings.peakBoost * range;
-
-                    heightData[idx] = h;
-                }
-            }
-        }
+        // Generate heightmap using the canonical algorithm
+        std::vector<float> heightData = previewGenerator.GenerateHeightmap();
 
         // Calculate min/max heights
         float minHeight = std::numeric_limits<float>::max();

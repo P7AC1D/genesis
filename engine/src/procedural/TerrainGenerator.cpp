@@ -1,6 +1,7 @@
 #include "genesis/procedural/TerrainGenerator.h"
 #include <algorithm>
 #include <cmath>
+#include <random>
 
 namespace Genesis
 {
@@ -22,12 +23,12 @@ namespace Genesis
         m_CachedHeightmap.clear();
     }
 
-    float TerrainGenerator::SampleHeight(float x, float z) const
+    float TerrainGenerator::SampleRawHeight(float worldX, float worldZ) const
     {
-        float noiseX = x * m_Settings.noiseScale;
-        float noiseZ = z * m_Settings.noiseScale;
+        float noiseX = worldX * m_Settings.noiseScale;
+        float noiseZ = worldZ * m_Settings.noiseScale;
 
-        // Get base terrain noise
+        // Layer 1: Base terrain noise (FBM with optional domain warping)
         float baseNoise;
         if (m_Settings.useWarp && m_Settings.warpLevels > 0)
         {
@@ -49,12 +50,13 @@ namespace Genesis
 
         float height = baseNoise;
 
+        // Layer 2: Ridge noise for mountains (optional)
         if (m_Settings.useRidgeNoise)
         {
-            // Get ridge noise for sharp mountain crests
             float ridgeCoordX = noiseX;
             float ridgeCoordZ = noiseZ;
 
+            // Apply domain warping to ridge coordinates for organic mountain shapes
             if (m_Settings.useWarp && m_Settings.warpLevels > 0 && m_Settings.warpStrength > 0.0f)
             {
                 float wx = ridgeCoordX;
@@ -81,6 +83,7 @@ namespace Genesis
                 ridgeCoordZ = wz;
             }
 
+            // Generate ridge noise for sharp mountain crests
             float ridgeNoiseX = ridgeCoordX * m_Settings.ridgeScale;
             float ridgeNoiseZ = ridgeCoordZ * m_Settings.ridgeScale;
             float ridgeNoise = m_Noise.RidgeNoise(ridgeNoiseX, ridgeNoiseZ,
@@ -91,12 +94,12 @@ namespace Genesis
             // Apply power function to sharpen ridge peaks
             ridgeNoise = std::pow(ridgeNoise, m_Settings.ridgePower);
 
-            // Calculate uplift mask - determines where mountains appear
+            // Layer 3: Tectonic uplift mask (determines WHERE mountains appear)
             float upliftMask = 1.0f;
             if (m_Settings.useUpliftMask)
             {
-                float upliftNoiseX = x * m_Settings.upliftScale;
-                float upliftNoiseZ = z * m_Settings.upliftScale;
+                float upliftNoiseX = worldX * m_Settings.upliftScale;
+                float upliftNoiseZ = worldZ * m_Settings.upliftScale;
                 float upliftNoise = m_Noise.FBM(upliftNoiseX, upliftNoiseZ, 2, 0.5f, 2.0f);
                 upliftNoise = (upliftNoise + 1.0f) * 0.5f; // Map to [0, 1]
 
@@ -108,32 +111,248 @@ namespace Genesis
                 upliftMask = std::pow(upliftMask, m_Settings.upliftPower);
             }
 
-            // Apply uplift mask to ridge contribution
+            // Blend base terrain with mountains based on uplift mask
             float ridgeContribution = ridgeNoise * m_Settings.ridgeWeight * upliftMask;
             float baseWeight = 1.0f - (m_Settings.ridgeWeight * upliftMask);
             height = baseNoise * baseWeight + ridgeContribution;
+
+            // Ridge peak sharpening: extra boost at peaks (based on ridgeNoise, not height)
+            height += std::pow(ridgeNoise, 4.0f) * m_Settings.peakBoost * upliftMask;
         }
 
         // Map from [-1, 1] to [0, 1]
         height = (height + 1.0f) * 0.5f;
 
+        // Height-dependent shaping: sharp tops, soft bases
+        float heightNorm = std::clamp(height, 0.0f, 1.0f);
+        float shapeFactor = 1.0f - 0.4f * heightNorm;
+        height *= shapeFactor;
+
         return m_Settings.baseHeight + height * m_Settings.heightScale;
     }
 
-    std::vector<float> TerrainGenerator::GenerateHeightmap()
+    void TerrainGenerator::ApplySlopeErosion(std::vector<float> &heightmap, int width, int depth) const
     {
-        int width = m_Settings.width + 1;
-        int depth = m_Settings.depth + 1;
+        std::vector<float> eroded = heightmap;
 
-        m_CachedHeightmap.resize(width * depth);
+        for (int z = 1; z < depth - 1; z++)
+        {
+            for (int x = 1; x < width - 1; x++)
+            {
+                int idx = z * width + x;
+                float h = heightmap[idx];
+
+                // Calculate slope from 4-connected neighbors using gradient magnitude
+                float hL = heightmap[idx - 1];
+                float hR = heightmap[idx + 1];
+                float hU = heightmap[(z - 1) * width + x];
+                float hD = heightmap[(z + 1) * width + x];
+
+                float slopeX = (hR - hL) / (2.0f * m_Settings.cellSize);
+                float slopeZ = (hD - hU) / (2.0f * m_Settings.cellSize);
+                float slope = std::sqrt(slopeX * slopeX + slopeZ * slopeZ);
+
+                // Slope erosion: steep areas erode faster (multiplicative factor)
+                if (slope > m_Settings.slopeThreshold)
+                {
+                    float erosionFactor = 1.0f - m_Settings.slopeErosionStrength *
+                                                     std::min(1.0f, (slope - m_Settings.slopeThreshold) / m_Settings.slopeThreshold);
+                    h *= erosionFactor;
+                }
+
+                // Valley deepening: areas lower than neighbors carve deeper
+                float avgNeighbor = (hL + hR + hU + hD) * 0.25f;
+                if (h < avgNeighbor)
+                {
+                    float valleyFactor = (avgNeighbor - h) / m_Settings.heightScale;
+                    h -= valleyFactor * m_Settings.valleyDepth * m_Settings.heightScale;
+                }
+
+                eroded[idx] = h;
+            }
+        }
+
+        heightmap = eroded;
+    }
+
+    void TerrainGenerator::ApplyHydraulicErosion(std::vector<float> &heightmap, int width, int depth, float offsetX, float offsetZ) const
+    {
+        // Create deterministic seed based on chunk position using integer grid coordinates
+        // This ensures consistency regardless of float precision or negative values
+        int32_t chunkGridX = static_cast<int32_t>(std::floor(offsetX / (m_Settings.width * m_Settings.cellSize)));
+        int32_t chunkGridZ = static_cast<int32_t>(std::floor(offsetZ / (m_Settings.depth * m_Settings.cellSize)));
+        uint32_t chunkSeed = m_Settings.seed ^ (static_cast<uint32_t>(chunkGridX * 198491317) ^ static_cast<uint32_t>(chunkGridZ * 6542989));
+
+        std::mt19937 rng(chunkSeed);
+        std::uniform_real_distribution<float> distX(1.0f, static_cast<float>(width - 2));
+        std::uniform_real_distribution<float> distZ(1.0f, static_cast<float>(depth - 2));
+
+        for (int iter = 0; iter < m_Settings.erosionIterations; iter++)
+        {
+            // Spawn water droplet at random position
+            float dropX = distX(rng);
+            float dropZ = distZ(rng);
+            float dirX = 0.0f;
+            float dirZ = 0.0f;
+            float speed = 1.0f;
+            float water = 1.0f;
+            float sediment = 0.0f;
+
+            constexpr int MAX_DROPLET_STEPS = 64;
+            for (int step = 0; step < MAX_DROPLET_STEPS; step++)
+            {
+                int cellX = static_cast<int>(dropX);
+                int cellZ = static_cast<int>(dropZ);
+
+                if (cellX < 1 || cellX >= width - 1 || cellZ < 1 || cellZ >= depth - 1)
+                    break;
+
+                int idx = cellZ * width + cellX;
+
+                // Calculate gradient from neighbors
+                float hL = heightmap[idx - 1];
+                float hR = heightmap[idx + 1];
+                float hU = heightmap[(cellZ - 1) * width + cellX];
+                float hD = heightmap[(cellZ + 1) * width + cellX];
+                float hC = heightmap[idx];
+
+                float gradX = (hR - hL) * 0.5f;
+                float gradZ = (hD - hU) * 0.5f;
+
+                // Update direction with inertia
+                dirX = dirX * m_Settings.erosionInertia - gradX * (1.0f - m_Settings.erosionInertia);
+                dirZ = dirZ * m_Settings.erosionInertia - gradZ * (1.0f - m_Settings.erosionInertia);
+
+                // Normalize direction
+                float len = std::sqrt(dirX * dirX + dirZ * dirZ);
+                if (len < 0.0001f)
+                    break;
+                dirX /= len;
+                dirZ /= len;
+
+                // Move droplet
+                float newX = dropX + dirX;
+                float newZ = dropZ + dirZ;
+
+                int newCellX = static_cast<int>(newX);
+                int newCellZ = static_cast<int>(newZ);
+                if (newCellX < 1 || newCellX >= width - 1 || newCellZ < 1 || newCellZ >= depth - 1)
+                    break;
+
+                float newH = heightmap[newCellZ * width + newCellX];
+                float deltaH = newH - hC;
+
+                // Calculate sediment capacity
+                float capacity = std::max(-deltaH, 0.01f) * speed * water * m_Settings.erosionCapacity;
+
+                if (sediment > capacity || deltaH > 0)
+                {
+                    // Deposit sediment
+                    float depositAmount = (deltaH > 0) ? std::min(deltaH, sediment) : (sediment - capacity) * m_Settings.erosionDeposition;
+                    sediment -= depositAmount;
+                    heightmap[idx] += depositAmount;
+                }
+                else
+                {
+                    // Erode terrain
+                    float erodeAmount = std::min((capacity - sediment) * 0.3f, -deltaH);
+                    sediment += erodeAmount;
+                    heightmap[idx] -= erodeAmount;
+                }
+
+                // Update droplet state
+                dropX = newX;
+                dropZ = newZ;
+                speed = std::sqrt(std::max(0.0f, speed * speed + deltaH));
+                water *= (1.0f - m_Settings.erosionEvaporation);
+
+                if (water < 0.01f)
+                    break;
+            }
+        }
+    }
+
+    void TerrainGenerator::ApplyPeakShaping(std::vector<float> &heightmap, int width, int depth) const
+    {
+        float minH = m_Settings.baseHeight;
+        float maxH = m_Settings.baseHeight + m_Settings.heightScale;
+        float range = maxH - minH;
+
+        if (range <= 0.0f)
+            return;
 
         for (int z = 0; z < depth; z++)
         {
             for (int x = 0; x < width; x++)
             {
-                float worldX = x * m_Settings.cellSize;
-                float worldZ = z * m_Settings.cellSize;
-                m_CachedHeightmap[z * width + x] = SampleHeight(worldX, worldZ);
+                int idx = z * width + x;
+                float h = heightmap[idx];
+
+                // Normalize height to [0,1]
+                float heightNorm = std::clamp((h - minH) / range, 0.0f, 1.0f);
+
+                // Soft bases, sharp peaks: multiply by lerp(1.0, 0.6, h)
+                float shapeFactor = 1.0f - 0.4f * heightNorm;
+                h = minH + (h - minH) * shapeFactor;
+
+                // Extra peak sharpening
+                h += std::pow(heightNorm, 4.0f) * m_Settings.peakBoost * range;
+
+                heightmap[idx] = h;
+            }
+        }
+    }
+
+    std::vector<float> TerrainGenerator::GenerateHeightmap()
+    {
+        return GenerateHeightmapAtOffset(0.0f, 0.0f);
+    }
+
+    std::vector<float> TerrainGenerator::GenerateHeightmapAtOffset(float offsetX, float offsetZ)
+    {
+        int width = m_Settings.width + 1;
+        int depth = m_Settings.depth + 1;
+
+        // Generate with a 1-cell border for erosion context (allows erosion at chunk edges)
+        constexpr int BORDER = 1;
+        int extWidth = width + 2 * BORDER;
+        int extDepth = depth + 2 * BORDER;
+
+        std::vector<float> extHeightmap(extWidth * extDepth);
+
+        // Step 1: Generate extended heightmap with border for erosion context
+        for (int z = 0; z < extDepth; z++)
+        {
+            for (int x = 0; x < extWidth; x++)
+            {
+                float localX = (x - BORDER) * m_Settings.cellSize;
+                float localZ = (z - BORDER) * m_Settings.cellSize;
+                float worldX = offsetX + localX;
+                float worldZ = offsetZ + localZ;
+
+                extHeightmap[z * extWidth + x] = SampleRawHeight(worldX, worldZ);
+            }
+        }
+
+        // Step 2: Apply erosion effects on extended heightmap
+        if (m_Settings.useErosion)
+        {
+            ApplySlopeErosion(extHeightmap, extWidth, extDepth);
+
+            if (m_Settings.useHydraulicErosion && m_Settings.erosionIterations > 0)
+            {
+                ApplyHydraulicErosion(extHeightmap, extWidth, extDepth, offsetX, offsetZ);
+            }
+        }
+
+        // Step 3: Extract the actual chunk heightmap (trim border)
+        m_CachedHeightmap.resize(width * depth);
+        for (int z = 0; z < depth; z++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int extIdx = (z + BORDER) * extWidth + (x + BORDER);
+                m_CachedHeightmap[z * width + x] = extHeightmap[extIdx];
             }
         }
 
@@ -144,7 +363,7 @@ namespace Genesis
     {
         if (m_CachedHeightmap.empty())
         {
-            return SampleHeight(worldX, worldZ);
+            return SampleRawHeight(worldX, worldZ);
         }
 
         // Bilinear interpolation from cached heightmap
@@ -190,48 +409,32 @@ namespace Genesis
         const glm::vec3 snow(0.95f, 0.95f, 0.97f);
 
         if (normalizedHeight < settings.waterLevel * 0.5f)
-        {
             return deepWater;
-        }
-        else if (normalizedHeight < settings.waterLevel)
-        {
+        if (normalizedHeight < settings.waterLevel)
             return shallowWater;
-        }
-        else if (normalizedHeight < settings.sandLevel)
-        {
+        if (normalizedHeight < settings.sandLevel)
             return sand;
-        }
-        else if (normalizedHeight < settings.grassLevel * 0.7f)
-        {
+        if (normalizedHeight < settings.grassLevel * 0.7f)
             return grass;
-        }
-        else if (normalizedHeight < settings.grassLevel)
-        {
+        if (normalizedHeight < settings.grassLevel)
             return darkGrass;
-        }
-        else if (normalizedHeight < settings.rockLevel)
-        {
+        if (normalizedHeight < settings.rockLevel)
             return rock;
-        }
-        else
-        {
-            return snow;
-        }
+        return snow;
     }
 
-    std::shared_ptr<Mesh> TerrainGenerator::Generate()
+    std::shared_ptr<Mesh> TerrainGenerator::BuildMeshFromHeightmap(const std::vector<float> &heightmap, float offsetX, float offsetZ) const
     {
-        GenerateHeightmap();
-
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
 
         int width = m_Settings.width + 1;
         int depth = m_Settings.depth + 1;
 
-        // Find min/max height for normalization
-        float minHeight = *std::min_element(m_CachedHeightmap.begin(), m_CachedHeightmap.end());
-        float maxHeight = *std::max_element(m_CachedHeightmap.begin(), m_CachedHeightmap.end());
+        // Use consistent global height range for color normalization (not per-chunk min/max)
+        // This ensures colors are consistent across chunk boundaries
+        float minHeight = m_Settings.baseHeight;
+        float maxHeight = m_Settings.baseHeight + m_Settings.heightScale;
         float heightRange = maxHeight - minHeight;
         if (heightRange < 0.001f)
             heightRange = 1.0f;
@@ -243,23 +446,22 @@ namespace Genesis
             {
                 for (int x = 0; x < m_Settings.width; x++)
                 {
-                    // Get the 4 corners of this cell
                     float x0 = x * m_Settings.cellSize;
                     float x1 = (x + 1) * m_Settings.cellSize;
                     float z0 = z * m_Settings.cellSize;
                     float z1 = (z + 1) * m_Settings.cellSize;
 
-                    float h00 = m_CachedHeightmap[z * width + x];
-                    float h10 = m_CachedHeightmap[z * width + (x + 1)];
-                    float h01 = m_CachedHeightmap[(z + 1) * width + x];
-                    float h11 = m_CachedHeightmap[(z + 1) * width + (x + 1)];
+                    float h00 = heightmap[z * width + x];
+                    float h10 = heightmap[z * width + (x + 1)];
+                    float h01 = heightmap[(z + 1) * width + x];
+                    float h11 = heightmap[(z + 1) * width + (x + 1)];
 
                     glm::vec3 p00(x0, h00, z0);
                     glm::vec3 p10(x1, h10, z0);
                     glm::vec3 p01(x0, h01, z1);
                     glm::vec3 p11(x1, h11, z1);
 
-                    // Triangle 1: p00, p01, p10 (CCW winding for upward normal)
+                    // Triangle 1: p00, p01, p10 (CCW winding)
                     glm::vec3 normal1 = glm::normalize(glm::cross(p01 - p00, p10 - p00));
                     float avgH1 = (h00 + h10 + h01) / 3.0f;
                     float normH1 = (avgH1 - minHeight) / heightRange;
@@ -273,7 +475,7 @@ namespace Genesis
                     indices.push_back(baseIdx + 1);
                     indices.push_back(baseIdx + 2);
 
-                    // Triangle 2: p10, p01, p11 (CCW winding for upward normal)
+                    // Triangle 2: p10, p01, p11 (CCW winding)
                     glm::vec3 normal2 = glm::normalize(glm::cross(p01 - p10, p11 - p10));
                     float avgH2 = (h10 + h11 + h01) / 3.0f;
                     float normH2 = (avgH2 - minHeight) / heightRange;
@@ -292,20 +494,19 @@ namespace Genesis
         else
         {
             // Smooth shading: shared vertices with averaged normals
-            // First pass: create vertices with positions and colors
             for (int z = 0; z < depth; z++)
             {
                 for (int x = 0; x < width; x++)
                 {
                     float worldX = x * m_Settings.cellSize;
                     float worldZ = z * m_Settings.cellSize;
-                    float height = m_CachedHeightmap[z * width + x];
+                    float height = heightmap[z * width + x];
 
                     float normH = (height - minHeight) / heightRange;
                     glm::vec3 color = m_Settings.useHeightColors ? GetHeightColor(normH, m_Settings) : glm::vec3(0.34f, 0.55f, 0.25f);
 
                     vertices.push_back({glm::vec3(worldX, height, worldZ),
-                                        glm::vec3(0.0f, 1.0f, 0.0f), // Will be recalculated
+                                        glm::vec3(0.0f, 1.0f, 0.0f),
                                         color});
                 }
             }
@@ -322,7 +523,6 @@ namespace Genesis
                     uint32_t i01 = (z + 1) * width + x;
                     uint32_t i11 = (z + 1) * width + (x + 1);
 
-                    // Triangle 1 (CCW: i00, i01, i10)
                     indices.push_back(i00);
                     indices.push_back(i01);
                     indices.push_back(i10);
@@ -334,7 +534,6 @@ namespace Genesis
                     normals[i01] += n1;
                     normals[i10] += n1;
 
-                    // Triangle 2 (CCW: i10, i01, i11)
                     indices.push_back(i10);
                     indices.push_back(i01);
                     indices.push_back(i11);
@@ -348,7 +547,6 @@ namespace Genesis
                 }
             }
 
-            // Normalize all normals
             for (size_t i = 0; i < vertices.size(); i++)
             {
                 vertices[i].Normal = glm::normalize(normals[i]);
@@ -356,6 +554,18 @@ namespace Genesis
         }
 
         return std::make_shared<Mesh>(vertices, indices);
+    }
+
+    std::shared_ptr<Mesh> TerrainGenerator::Generate()
+    {
+        GenerateHeightmap();
+        return BuildMeshFromHeightmap(m_CachedHeightmap, 0.0f, 0.0f);
+    }
+
+    std::shared_ptr<Mesh> TerrainGenerator::GenerateAtOffset(float offsetX, float offsetZ)
+    {
+        GenerateHeightmapAtOffset(offsetX, offsetZ);
+        return BuildMeshFromHeightmap(m_CachedHeightmap, offsetX, offsetZ);
     }
 
 }
