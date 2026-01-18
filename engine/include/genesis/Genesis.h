@@ -13,6 +13,7 @@
 #include "genesis/renderer/Camera.h"
 #include "genesis/renderer/Mesh.h"
 #include "genesis/renderer/Light.h"
+#include "genesis/renderer/InstancedRenderer.h"
 
 // ECS
 #include "genesis/ecs/Scene.h"
@@ -33,6 +34,8 @@
 #include "genesis/procedural/ClimateGenerator.h"
 #include "genesis/procedural/BiomeClassifier.h"
 #include "genesis/procedural/MaterialBlender.h"
+#include "genesis/procedural/LakeMeshGenerator.h"
+#include "genesis/procedural/RiverMeshGenerator.h"
 #include "genesis/procedural/Water.h"
 
 // World

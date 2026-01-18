@@ -16,6 +16,7 @@ set(ENGINE_SOURCES
     src/renderer/Camera.cpp
     src/renderer/Light.cpp
     src/renderer/HeightmapTexture.cpp
+    src/renderer/InstancedRenderer.cpp
     
     src/ecs/Scene.cpp
     src/ecs/Entity.cpp
@@ -34,6 +35,8 @@ set(ENGINE_SOURCES
     src/procedural/ClimateGenerator.cpp
     src/procedural/BiomeClassifier.cpp
     src/procedural/MaterialBlender.cpp
+    src/procedural/LakeMeshGenerator.cpp
+    src/procedural/RiverMeshGenerator.cpp
     src/procedural/Water.cpp
     src/procedural/OceanMask.cpp
     
