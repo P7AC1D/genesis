@@ -36,6 +36,8 @@
 #include "genesis/procedural/MaterialBlender.h"
 #include "genesis/procedural/LakeMeshGenerator.h"
 #include "genesis/procedural/RiverMeshGenerator.h"
+#include "genesis/procedural/TerrainDebugView.h"
+#include "genesis/procedural/SystemInvariants.h"
 #include "genesis/procedural/Water.h"
 
 // World

@@ -2,6 +2,7 @@
 
 #include "genesis/procedural/TerrainGenerator.h"
 #include "genesis/procedural/TerrainIntent.h"
+#include "genesis/procedural/TerrainDebugView.h"
 #include "genesis/renderer/HeightmapTexture.h"
 #include "genesis/world/ChunkManager.h"
 #include <memory>
@@ -57,6 +58,7 @@ namespace Genesis
         void RenderColorSection();
         void RenderWaterSection();
         void RenderPreviewSection();
+        void RenderDebugViewSection();
 
         void UpdateHeightmapPreview();
         void ApplySettings();
@@ -86,6 +88,10 @@ namespace Genesis
         std::unique_ptr<HeightmapTexture> m_HeightmapTexture;
         bool m_SettingsChanged = false;
         bool m_NeedsPreviewUpdate = true;
+
+        // Debug view settings
+        int m_DebugViewIndex = 0;
+        TerrainDebugView m_DebugView;
 
         static constexpr int PREVIEW_SIZE = 128;
     };

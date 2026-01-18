@@ -86,6 +86,8 @@ namespace Genesis
         ImGui::Separator();
         RenderWaterSection();
         ImGui::Separator();
+        RenderDebugViewSection();
+        ImGui::Separator();
 
         ImGui::Spacing();
         if (ImGui::Button("Apply Changes", ImVec2(-1, 30)))
@@ -642,6 +644,98 @@ namespace Genesis
                     ImGui::SliderFloat("Evaporation Rate", &m_TerrainSettings.erosionEvaporation, 0.0f, 0.1f, "%.3f");
                     if (ImGui::IsItemHovered())
                         ImGui::SetTooltip("How quickly droplets lose water and stop.\nHigher = shorter flow paths.");
+                }
+            }
+        }
+    }
+
+    void TerrainSettingsPanel::RenderDebugViewSection()
+    {
+        if (ImGui::CollapsingHeader("Debug Views (Section 32)"))
+        {
+            ImGui::TextWrapped("Visualize intermediate terrain fields for debugging and validation.");
+            ImGui::Spacing();
+
+            // Debug view type selector
+            const char *viewNames[] = {
+                "None",
+                "Height",
+                "Continental Mask",
+                "Uplift Mask",
+                "Slope",
+                "Flow Direction",
+                "Flow Accumulation",
+                "Water Type",
+                "Distance to Water",
+                "Temperature",
+                "Moisture",
+                "Fertility",
+                "Dominant Biome",
+                "Dominant Material"};
+
+            if (ImGui::Combo("View Type", &m_DebugViewIndex, viewNames, IM_ARRAYSIZE(viewNames)))
+            {
+                m_DebugView.GetSettings().activeView = static_cast<DebugViewType>(m_DebugViewIndex);
+            }
+
+            if (m_DebugViewIndex > 0)
+            {
+                ImGui::SliderFloat("Overlay Opacity", &m_DebugView.GetSettings().overlayOpacity, 0.0f, 1.0f, "%.2f");
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Transparency of the debug overlay.\n0 = invisible, 1 = fully opaque.");
+
+                ImGui::Checkbox("Show Chunk Boundaries", &m_DebugView.GetSettings().showChunkBoundaries);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Draws lines at chunk edges to visualize chunk seams.");
+
+                // Color legend for categorical views
+                if (m_DebugViewIndex == static_cast<int>(DebugViewType::WaterType))
+                {
+                    ImGui::Separator();
+                    ImGui::Text("Legend:");
+                    ImGui::BulletText("Black: None");
+                    ImGui::BulletText("Light Blue: Stream");
+                    ImGui::BulletText("Blue: River");
+                    ImGui::BulletText("Dark Blue: Lake");
+                    ImGui::BulletText("Deep Blue: Ocean");
+                }
+                else if (m_DebugViewIndex == static_cast<int>(DebugViewType::FlowDirection))
+                {
+                    ImGui::Separator();
+                    ImGui::Text("Legend (Flow Direction):");
+                    ImGui::BulletText("Green: North");
+                    ImGui::BulletText("Yellow: East");
+                    ImGui::BulletText("Red: South");
+                    ImGui::BulletText("Magenta: West");
+                    ImGui::BulletText("Black: Pit/Sink");
+                }
+                else if (m_DebugViewIndex == static_cast<int>(DebugViewType::DominantBiome))
+                {
+                    ImGui::Separator();
+                    ImGui::Text("Legend (Biomes):");
+                    ImGui::BulletText("White-Blue: Polar");
+                    ImGui::BulletText("Gray-Blue: Tundra");
+                    ImGui::BulletText("Dark Green: Boreal");
+                    ImGui::BulletText("Medium Green: Temperate");
+                    ImGui::BulletText("Olive: Mediterranean");
+                    ImGui::BulletText("Yellow-Green: Grassland");
+                    ImGui::BulletText("Sandy: Desert");
+                    ImGui::BulletText("Bright Green: Tropical");
+                    ImGui::BulletText("Deep Green: Rainforest");
+                    ImGui::BulletText("Teal: Wetland");
+                }
+                else if (m_DebugViewIndex == static_cast<int>(DebugViewType::DominantMaterial))
+                {
+                    ImGui::Separator();
+                    ImGui::Text("Legend (Materials):");
+                    ImGui::BulletText("Gray: Rock");
+                    ImGui::BulletText("Brown: Dirt");
+                    ImGui::BulletText("Green: Grass");
+                    ImGui::BulletText("Sandy: Sand");
+                    ImGui::BulletText("White: Snow");
+                    ImGui::BulletText("Light Blue: Ice");
+                    ImGui::BulletText("Dark Brown: Mud");
+                    ImGui::BulletText("Blue: Water");
                 }
             }
         }

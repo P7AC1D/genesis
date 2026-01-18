@@ -35,6 +35,7 @@ set(ENGINE_SOURCES
     src/procedural/ClimateGenerator.cpp
     src/procedural/BiomeClassifier.cpp
     src/procedural/MaterialBlender.cpp
+    src/procedural/TerrainDebugView.cpp
     src/procedural/LakeMeshGenerator.cpp
     src/procedural/RiverMeshGenerator.cpp
     src/procedural/Water.cpp
