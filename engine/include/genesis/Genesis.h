@@ -24,6 +24,7 @@
 #include "genesis/procedural/TerrainGenerator.h"
 #include "genesis/procedural/TerrainIntent.h"
 #include "genesis/procedural/GeologicalFields.h"
+#include "genesis/procedural/DrainageGraph.h"
 #include "genesis/procedural/Water.h"
 
 // World

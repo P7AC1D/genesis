@@ -25,6 +25,7 @@ set(ENGINE_SOURCES
     src/procedural/TerrainGenerator.cpp
     src/procedural/TerrainIntent.cpp
     src/procedural/GeologicalFields.cpp
+    src/procedural/DrainageGraph.cpp
     src/procedural/Water.cpp
     src/procedural/OceanMask.cpp
     
