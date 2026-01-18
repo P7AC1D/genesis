@@ -26,6 +26,7 @@
 #include "genesis/procedural/GeologicalFields.h"
 #include "genesis/procedural/DrainageGraph.h"
 #include "genesis/procedural/RiverGenerator.h"
+#include "genesis/procedural/LakeGenerator.h"
 #include "genesis/procedural/Water.h"
 
 // World
