@@ -488,6 +488,32 @@ namespace Genesis
         return snow;
     }
 
+    glm::vec3 TerrainGenerator::GetTerrainColor(float normalizedHeight, float slope, const TerrainSettings &settings)
+    {
+        // Get base color from height
+        glm::vec3 heightColor = GetHeightColor(normalizedHeight, settings);
+
+        // If slope coloring is disabled, return height-based color
+        if (!settings.useSlopeColoring)
+            return heightColor;
+
+        // Don't apply slope coloring to water or snow (they should remain their colors)
+        if (normalizedHeight < settings.sandLevel || normalizedHeight >= settings.rockLevel)
+            return heightColor;
+
+        // Calculate slope blend factor using smoothstep for gradual transition
+        // slope: 0 = flat, 1 = vertical cliff
+        float blendStart = settings.slopeColorThreshold;
+        float blendEnd = settings.slopeColorThreshold + settings.slopeColorBlend;
+
+        // Smoothstep interpolation
+        float t = std::clamp((slope - blendStart) / (blendEnd - blendStart + 0.001f), 0.0f, 1.0f);
+        float slopeBlend = t * t * (3.0f - 2.0f * t);
+
+        // Blend between height color and steep slope color (rock/cliff)
+        return heightColor * (1.0f - slopeBlend) + settings.steepSlopeColor * slopeBlend;
+    }
+
     std::shared_ptr<Mesh> TerrainGenerator::BuildMeshFromHeightmap(const std::vector<float> &heightmap, float offsetX, float offsetZ) const
     {
         std::vector<Vertex> vertices;
@@ -530,7 +556,10 @@ namespace Genesis
                     glm::vec3 normal1 = glm::normalize(glm::cross(p01 - p00, p10 - p00));
                     float avgH1 = (h00 + h10 + h01) / 3.0f;
                     float normH1 = (avgH1 - minHeight) / heightRange;
-                    glm::vec3 color1 = m_Settings.useHeightColors ? GetHeightColor(normH1, m_Settings) : glm::vec3(0.34f, 0.55f, 0.25f);
+
+                    // Calculate slope from normal (0 = flat, 1 = vertical cliff)
+                    float slope1 = 1.0f - std::abs(normal1.y);
+                    glm::vec3 color1 = m_Settings.useHeightColors ? GetTerrainColor(normH1, slope1, m_Settings) : glm::vec3(0.34f, 0.55f, 0.25f);
 
                     uint32_t baseIdx = static_cast<uint32_t>(vertices.size());
                     vertices.push_back({p00, normal1, color1});
@@ -544,7 +573,10 @@ namespace Genesis
                     glm::vec3 normal2 = glm::normalize(glm::cross(p01 - p10, p11 - p10));
                     float avgH2 = (h10 + h11 + h01) / 3.0f;
                     float normH2 = (avgH2 - minHeight) / heightRange;
-                    glm::vec3 color2 = m_Settings.useHeightColors ? GetHeightColor(normH2, m_Settings) : glm::vec3(0.34f, 0.55f, 0.25f);
+
+                    // Calculate slope from normal (0 = flat, 1 = vertical cliff)
+                    float slope2 = 1.0f - std::abs(normal2.y);
+                    glm::vec3 color2 = m_Settings.useHeightColors ? GetTerrainColor(normH2, slope2, m_Settings) : glm::vec3(0.34f, 0.55f, 0.25f);
 
                     baseIdx = static_cast<uint32_t>(vertices.size());
                     vertices.push_back({p10, normal2, color2});
@@ -615,6 +647,15 @@ namespace Genesis
             for (size_t i = 0; i < vertices.size(); i++)
             {
                 vertices[i].Normal = glm::normalize(normals[i]);
+
+                // Recalculate color with slope information now that we have normals
+                if (m_Settings.useHeightColors && m_Settings.useSlopeColoring)
+                {
+                    float height = vertices[i].Position.y;
+                    float normH = (height - minHeight) / heightRange;
+                    float slope = 1.0f - std::abs(vertices[i].Normal.y);
+                    vertices[i].Color = GetTerrainColor(normH, slope, m_Settings);
+                }
             }
         }
 

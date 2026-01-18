@@ -68,6 +68,12 @@ namespace Genesis
         float sandLevel = 0.25f;
         float grassLevel = 0.6f;
         float rockLevel = 0.8f;
+
+        // Slope-based coloring for realistic mountains
+        bool useSlopeColoring = true;                   // Color steep slopes as rock/cliff
+        float slopeColorThreshold = 0.4f;               // Slope value where rock starts (0-1)
+        float slopeColorBlend = 0.2f;                   // Transition smoothness
+        glm::vec3 steepSlopeColor{0.55f, 0.52f, 0.48f}; // Rock/cliff color
     };
 
     class TerrainGenerator
@@ -97,7 +103,10 @@ namespace Genesis
         // Get the cached heightmap (must call GenerateHeightmap first)
         const std::vector<float> &GetCachedHeightmap() const { return m_CachedHeightmap; }
 
-        // Get color for height value
+        // Get color for height and slope value
+        static glm::vec3 GetTerrainColor(float normalizedHeight, float slope, const TerrainSettings &settings);
+
+        // Legacy: Get color for height value only (no slope)
         static glm::vec3 GetHeightColor(float normalizedHeight, const TerrainSettings &settings);
 
         // Sample raw height at world position (no erosion/shaping)

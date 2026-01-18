@@ -491,6 +491,45 @@ namespace Genesis
                 ImGui::SliderFloat("Rock Level", &m_TerrainSettings.rockLevel, 0.0f, 1.0f, "%.2f");
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("Above this height = rock/snow.\nTip: higher Rock Level makes less exposed rock.");
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Text("Slope-Based Coloring:");
+
+                if (ImGui::Checkbox("Enable Slope Coloring", &m_TerrainSettings.useSlopeColoring))
+                {
+                    m_NeedsPreviewUpdate = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Colors steep slopes as rock/cliff regardless of height.\nCreates realistic cliff faces on mountains.");
+
+                if (m_TerrainSettings.useSlopeColoring)
+                {
+                    if (ImGui::SliderFloat("Slope Threshold", &m_TerrainSettings.slopeColorThreshold, 0.0f, 1.0f, "%.2f"))
+                    {
+                        m_NeedsPreviewUpdate = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Slope value where rock color starts.\n0 = even flat surfaces become rock\n0.4 = moderate slopes\n0.7 = only steep cliffs");
+
+                    if (ImGui::SliderFloat("Slope Blend", &m_TerrainSettings.slopeColorBlend, 0.0f, 0.5f, "%.2f"))
+                    {
+                        m_NeedsPreviewUpdate = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Transition smoothness from vegetation to rock.\nLower = sharper edge, higher = gradual blend.");
+
+                    float slopeColor[3] = {m_TerrainSettings.steepSlopeColor.r,
+                                           m_TerrainSettings.steepSlopeColor.g,
+                                           m_TerrainSettings.steepSlopeColor.b};
+                    if (ImGui::ColorEdit3("Cliff Color", slopeColor))
+                    {
+                        m_TerrainSettings.steepSlopeColor = glm::vec3(slopeColor[0], slopeColor[1], slopeColor[2]);
+                        m_NeedsPreviewUpdate = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Color used for steep cliff faces.\nTypically a rock/stone gray.");
+                }
             }
         }
     }
