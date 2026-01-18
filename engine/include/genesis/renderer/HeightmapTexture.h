@@ -17,6 +17,7 @@ namespace Genesis
         void Create(VulkanDevice &device, int width, int height);
         void Destroy();
         void Update(const std::vector<float> &heightData, float minHeight, float maxHeight);
+        void UpdateRGBA(const uint8_t *rgbaData, size_t dataSize);
 
         VkDescriptorSet GetDescriptorSet() const { return m_DescriptorSet; }
         int GetWidth() const { return m_Width; }

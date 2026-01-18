@@ -1,6 +1,7 @@
 #include "TerrainSettingsPanel.h"
 #include "genesis/renderer/VulkanDevice.h"
 #include "genesis/procedural/TerrainGenerator.h"
+#include "genesis/procedural/Noise.h"
 #include "genesis/core/Log.h"
 
 #include <imgui.h>
@@ -26,6 +27,10 @@ namespace Genesis
         m_UseOceanMask = worldSettings.useOceanMask;
         m_ViewDistance = worldSettings.viewDistance;
         m_Seed = worldSettings.seed;
+
+        // Initialize debug view from settings
+        m_DebugView.SetSettings(m_TerrainSettings.debugView);
+        m_DebugViewIndex = static_cast<int>(m_TerrainSettings.debugView.activeView);
 
         // Initialize with default "Rolling Temperate" preset
         const auto &presets = TerrainIntentMapper::GetPresets();
@@ -676,6 +681,7 @@ namespace Genesis
             if (ImGui::Combo("View Type", &m_DebugViewIndex, viewNames, IM_ARRAYSIZE(viewNames)))
             {
                 m_DebugView.GetSettings().activeView = static_cast<DebugViewType>(m_DebugViewIndex);
+                m_NeedsPreviewUpdate = true;
             }
 
             if (m_DebugViewIndex > 0)
@@ -737,6 +743,20 @@ namespace Genesis
                     ImGui::BulletText("Dark Brown: Mud");
                     ImGui::BulletText("Blue: Water");
                 }
+
+                // Note for complex views that require full pipeline
+                if (m_DebugViewIndex == static_cast<int>(DebugViewType::FlowDirection) ||
+                    m_DebugViewIndex == static_cast<int>(DebugViewType::FlowAccumulation) ||
+                    m_DebugViewIndex == static_cast<int>(DebugViewType::WaterType) ||
+                    m_DebugViewIndex == static_cast<int>(DebugViewType::DistanceToWater) ||
+                    m_DebugViewIndex == static_cast<int>(DebugViewType::DominantBiome) ||
+                    m_DebugViewIndex == static_cast<int>(DebugViewType::DominantMaterial))
+                {
+                    ImGui::Separator();
+                    ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f),
+                                       "Note: This view requires full hydrology/biome pipeline.\n"
+                                       "Preview shows heightmap. Full view available in-world.");
+                }
             }
         }
     }
@@ -792,7 +812,176 @@ namespace Genesis
             maxHeight = std::max(maxHeight, h);
         }
 
-        m_HeightmapTexture->Update(heightData, minHeight, maxHeight);
+        const int width = PREVIEW_SIZE;
+        const int depth = PREVIEW_SIZE;
+
+        DebugViewType viewType = static_cast<DebugViewType>(m_DebugViewIndex);
+
+        // For non-height debug views, generate the appropriate visualization
+        if (viewType == DebugViewType::None || viewType == DebugViewType::Height)
+        {
+            // Default: grayscale heightmap
+            m_HeightmapTexture->Update(heightData, minHeight, maxHeight);
+        }
+        else if (viewType == DebugViewType::Slope)
+        {
+            // Compute slope from heightmap
+            std::vector<float> slopeData(heightData.size());
+            for (int z = 0; z < depth; z++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int idx = z * width + x;
+                    float h = heightData[idx];
+
+                    // Sample neighbors (clamp at edges)
+                    float hLeft = (x > 0) ? heightData[z * width + (x - 1)] : h;
+                    float hRight = (x < width - 1) ? heightData[z * width + (x + 1)] : h;
+                    float hUp = (z > 0) ? heightData[(z - 1) * width + x] : h;
+                    float hDown = (z < depth - 1) ? heightData[(z + 1) * width + x] : h;
+
+                    float dX = (hRight - hLeft) / (2.0f * previewSettings.cellSize);
+                    float dZ = (hDown - hUp) / (2.0f * previewSettings.cellSize);
+                    slopeData[idx] = std::sqrt(dX * dX + dZ * dZ);
+                }
+            }
+            m_DebugView.GenerateSlopeView(slopeData, width, depth);
+            const auto &texData = m_DebugView.GetTextureData();
+            m_HeightmapTexture->UpdateRGBA(texData.GetData(), texData.GetDataSize());
+        }
+        else if (viewType == DebugViewType::ContinentalMask)
+        {
+            // Generate continental mask from noise
+            std::vector<float> continentalData(width * depth);
+            SimplexNoise noise(m_Seed + 1000);
+            for (int z = 0; z < depth; z++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    float wx = x * previewSettings.cellSize;
+                    float wz = z * previewSettings.cellSize;
+                    float value = noise.Noise(wx * previewSettings.continentalFrequency,
+                                              wz * previewSettings.continentalFrequency);
+                    continentalData[z * width + x] = value * 0.5f + 0.5f; // Normalize to [0,1]
+                }
+            }
+            m_DebugView.GenerateContinentalView(continentalData, width, depth);
+            const auto &texData = m_DebugView.GetTextureData();
+            m_HeightmapTexture->UpdateRGBA(texData.GetData(), texData.GetDataSize());
+        }
+        else if (viewType == DebugViewType::UpliftMask)
+        {
+            // Generate uplift mask from noise
+            std::vector<float> upliftData(width * depth);
+            SimplexNoise noise(m_Seed + 2000);
+            for (int z = 0; z < depth; z++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    float wx = x * previewSettings.cellSize;
+                    float wz = z * previewSettings.cellSize;
+                    float value = noise.Noise(wx * previewSettings.upliftScale,
+                                              wz * previewSettings.upliftScale);
+                    float normalized = value * 0.5f + 0.5f;
+                    // Apply threshold smoothstep
+                    float uplift = glm::smoothstep(previewSettings.upliftThresholdLow,
+                                                   previewSettings.upliftThresholdHigh, normalized);
+                    upliftData[z * width + x] = uplift;
+                }
+            }
+            m_DebugView.GenerateUpliftView(upliftData, width, depth);
+            const auto &texData = m_DebugView.GetTextureData();
+            m_HeightmapTexture->UpdateRGBA(texData.GetData(), texData.GetDataSize());
+        }
+        else if (viewType == DebugViewType::Temperature)
+        {
+            // Simple temperature gradient based on height and latitude
+            std::vector<float> tempData(width * depth);
+            float heightRange = maxHeight - minHeight;
+            if (heightRange < 0.001f)
+                heightRange = 1.0f;
+            for (int z = 0; z < depth; z++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int idx = z * width + x;
+                    float normalizedHeight = (heightData[idx] - minHeight) / heightRange;
+                    // Latitude effect (center is warmer)
+                    float latitude = std::abs((z / static_cast<float>(depth)) - 0.5f) * 2.0f;
+                    // Higher = colder, more latitude = colder
+                    tempData[idx] = glm::clamp(1.0f - normalizedHeight * 0.5f - latitude * 0.5f, 0.0f, 1.0f);
+                }
+            }
+            m_DebugView.GenerateTemperatureView(tempData, width, depth);
+            const auto &texData = m_DebugView.GetTextureData();
+            m_HeightmapTexture->UpdateRGBA(texData.GetData(), texData.GetDataSize());
+        }
+        else if (viewType == DebugViewType::Moisture)
+        {
+            // Simple moisture field (inverse of height, noise variation)
+            std::vector<float> moistureData(width * depth);
+            SimplexNoise noise(m_Seed + 3000);
+            float heightRange = maxHeight - minHeight;
+            if (heightRange < 0.001f)
+                heightRange = 1.0f;
+            for (int z = 0; z < depth; z++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int idx = z * width + x;
+                    float normalizedHeight = (heightData[idx] - minHeight) / heightRange;
+                    float noiseVal = noise.Noise(x * 0.05f, z * 0.05f) * 0.5f + 0.5f;
+                    // Lower areas are more moist
+                    moistureData[idx] = glm::clamp((1.0f - normalizedHeight) * 0.7f + noiseVal * 0.3f, 0.0f, 1.0f);
+                }
+            }
+            m_DebugView.GenerateMoistureView(moistureData, width, depth);
+            const auto &texData = m_DebugView.GetTextureData();
+            m_HeightmapTexture->UpdateRGBA(texData.GetData(), texData.GetDataSize());
+        }
+        else if (viewType == DebugViewType::Fertility)
+        {
+            // Fertility based on slope and height
+            std::vector<float> fertilityData(width * depth);
+            float heightRange = maxHeight - minHeight;
+            if (heightRange < 0.001f)
+                heightRange = 1.0f;
+            for (int z = 0; z < depth; z++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int idx = z * width + x;
+                    float h = heightData[idx];
+                    float normalizedHeight = (h - minHeight) / heightRange;
+
+                    // Compute slope
+                    float hLeft = (x > 0) ? heightData[z * width + (x - 1)] : h;
+                    float hRight = (x < width - 1) ? heightData[z * width + (x + 1)] : h;
+                    float hUp = (z > 0) ? heightData[(z - 1) * width + x] : h;
+                    float hDown = (z < depth - 1) ? heightData[(z + 1) * width + x] : h;
+                    float dX = (hRight - hLeft) / (2.0f * previewSettings.cellSize);
+                    float dZ = (hDown - hUp) / (2.0f * previewSettings.cellSize);
+                    float slope = std::sqrt(dX * dX + dZ * dZ);
+
+                    // Flat, mid-elevation areas are most fertile
+                    float heightFertility = 1.0f - std::abs(normalizedHeight - 0.4f) * 2.0f;
+                    float slopeFertility = 1.0f - glm::clamp(slope * 2.0f, 0.0f, 1.0f);
+                    fertilityData[idx] = glm::clamp(heightFertility * 0.5f + slopeFertility * 0.5f, 0.0f, 1.0f);
+                }
+            }
+            m_DebugView.GenerateFertilityView(fertilityData, width, depth);
+            const auto &texData = m_DebugView.GetTextureData();
+            m_HeightmapTexture->UpdateRGBA(texData.GetData(), texData.GetDataSize());
+        }
+        else
+        {
+            // For complex views (FlowDirection, FlowAccumulation, WaterType, DistanceToWater,
+            // DominantBiome, DominantMaterial), show heightmap with note
+            // These require full hydrology/biome pipeline which is too expensive for real-time preview
+            m_DebugView.GenerateHeightView(heightData, width, depth, minHeight, maxHeight);
+            const auto &texData = m_DebugView.GetTextureData();
+            m_HeightmapTexture->UpdateRGBA(texData.GetData(), texData.GetDataSize());
+        }
     }
 
     void TerrainSettingsPanel::ApplySettings()
@@ -827,6 +1016,9 @@ namespace Genesis
         {
             m_ChunkManager->SetViewDistance(m_ViewDistance);
         }
+
+        // Apply Debug View Settings
+        worldSettings.terrainSettings.debugView = m_DebugView.GetSettings();
 
         m_ChunkManager->RegenerateAllChunks();
         m_SettingsChanged = true;

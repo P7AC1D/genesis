@@ -42,6 +42,12 @@ if(APPLE)
             set(GENESIS_HOMEBREW_PREFIX "/usr/local")
         endif()
     endif()
+    
+    if(GENESIS_HOMEBREW_PREFIX)
+        message(STATUS "Terragen: Found Homebrew at ${GENESIS_HOMEBREW_PREFIX}")
+    else()
+        message(WARNING "Terragen: Could not detect Homebrew prefix")
+    endif()
 
     set(GENESIS_VK_ICD_JSON "${GENESIS_HOMEBREW_PREFIX}/etc/vulkan/icd.d/MoltenVK_icd.json")
     set(GENESIS_VK_LAYER_PATH "${GENESIS_HOMEBREW_PREFIX}/share/vulkan/explicit_layer.d")

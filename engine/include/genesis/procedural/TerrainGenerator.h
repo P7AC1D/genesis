@@ -1,6 +1,7 @@
 #pragma once
 
 #include "genesis/procedural/Noise.h"
+#include "genesis/procedural/TerrainDebugView.h"
 #include "genesis/renderer/Mesh.h"
 #include <memory>
 
@@ -17,6 +18,9 @@ namespace Genesis
         // Height settings
         float heightScale = 10.0f;
         float baseHeight = 0.0f;
+
+        // Debug Settings (Section 32)
+        DebugViewSettings debugView;
 
         // Continental field settings (geological field system)
         bool useContinentalField = true;      // Enable continental land/ocean generation

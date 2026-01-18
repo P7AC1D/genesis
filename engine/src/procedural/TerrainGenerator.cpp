@@ -586,6 +586,56 @@ namespace Genesis
         if (heightRange < 0.001f)
             heightRange = 1.0f;
 
+        // Debug visualization setup
+        bool showDebug = m_Settings.debugView.activeView != DebugViewType::None;
+        SimplexNoise debugNoise(m_Settings.seed);
+
+        auto ComputeFinalColor = [&](float wx, float wz, float h, float s, glm::vec3 base) -> glm::vec3
+        {
+            if (!showDebug)
+                return base;
+            glm::vec3 debugColor = base;
+            float opacity = m_Settings.debugView.overlayOpacity;
+
+            switch (m_Settings.debugView.activeView)
+            {
+            case DebugViewType::Slope:
+                debugColor = glm::vec3(std::clamp(s * 2.0f, 0.0f, 1.0f));
+                break;
+            case DebugViewType::ContinentalMask:
+            {
+                float val = debugNoise.Noise(wx * m_Settings.continentalFrequency, wz * m_Settings.continentalFrequency) * 0.5f + 0.5f;
+                debugColor = glm::vec3(val);
+                break;
+            }
+            case DebugViewType::UpliftMask:
+            {
+                float val = debugNoise.Noise(wx * m_Settings.upliftScale, wz * m_Settings.upliftScale) * 0.5f + 0.5f;
+                val = glm::smoothstep(m_Settings.upliftThresholdLow, m_Settings.upliftThresholdHigh, val);
+                debugColor = glm::vec3(val);
+                break;
+            }
+            case DebugViewType::Temperature:
+            {
+                float normH = (h - minHeight) / heightRange;
+                float val = std::clamp(1.0f - normH * 0.5f, 0.0f, 1.0f);
+                debugColor = glm::mix(glm::vec3(0, 0, 1), glm::vec3(1, 0, 0), val);
+                break;
+            }
+            case DebugViewType::Moisture:
+            {
+                float normH = (h - minHeight) / heightRange;
+                float noiseVal = debugNoise.Noise(wx * 0.05f, wz * 0.05f) * 0.5f + 0.5f;
+                float val = std::clamp((1.0f - normH) * 0.7f + noiseVal * 0.3f, 0.0f, 1.0f);
+                debugColor = glm::mix(glm::vec3(0.6f, 0.5f, 0.3f), glm::vec3(0.1f, 0.8f, 0.2f), val);
+                break;
+            }
+            default:
+                return base;
+            }
+            return glm::mix(base, debugColor, opacity);
+        };
+
         if (m_Settings.flatShading)
         {
             // Flat shading: each triangle has its own vertices with face normal
@@ -615,7 +665,10 @@ namespace Genesis
 
                     // Calculate slope from normal (0 = flat, 1 = vertical cliff)
                     float slope1 = 1.0f - std::abs(normal1.y);
-                    glm::vec3 color1 = m_Settings.useHeightColors ? GetTerrainColor(normH1, slope1, m_Settings) : glm::vec3(0.34f, 0.55f, 0.25f);
+                    glm::vec3 baseColor1 = m_Settings.useHeightColors ? GetTerrainColor(normH1, slope1, m_Settings) : glm::vec3(0.34f, 0.55f, 0.25f);
+
+                    glm::vec3 c1 = (p00 + p01 + p10) / 3.0f;
+                    glm::vec3 color1 = ComputeFinalColor(offsetX + c1.x, offsetZ + c1.z, avgH1, slope1, baseColor1);
 
                     uint32_t baseIdx = static_cast<uint32_t>(vertices.size());
                     vertices.push_back({p00, normal1, color1});
@@ -632,7 +685,10 @@ namespace Genesis
 
                     // Calculate slope from normal (0 = flat, 1 = vertical cliff)
                     float slope2 = 1.0f - std::abs(normal2.y);
-                    glm::vec3 color2 = m_Settings.useHeightColors ? GetTerrainColor(normH2, slope2, m_Settings) : glm::vec3(0.34f, 0.55f, 0.25f);
+                    glm::vec3 baseColor2 = m_Settings.useHeightColors ? GetTerrainColor(normH2, slope2, m_Settings) : glm::vec3(0.34f, 0.55f, 0.25f);
+
+                    glm::vec3 c2 = (p10 + p01 + p11) / 3.0f;
+                    glm::vec3 color2 = ComputeFinalColor(offsetX + c2.x, offsetZ + c2.z, avgH2, slope2, baseColor2);
 
                     baseIdx = static_cast<uint32_t>(vertices.size());
                     vertices.push_back({p10, normal2, color2});
@@ -704,14 +760,19 @@ namespace Genesis
             {
                 vertices[i].Normal = glm::normalize(normals[i]);
 
+                float height = vertices[i].Position.y;
+                float normH = (height - minHeight) / heightRange;
+                float slope = 1.0f - std::abs(vertices[i].Normal.y);
+
+                glm::vec3 baseColor = vertices[i].Color;
+
                 // Recalculate color with slope information now that we have normals
                 if (m_Settings.useHeightColors && m_Settings.useSlopeColoring)
                 {
-                    float height = vertices[i].Position.y;
-                    float normH = (height - minHeight) / heightRange;
-                    float slope = 1.0f - std::abs(vertices[i].Normal.y);
-                    vertices[i].Color = GetTerrainColor(normH, slope, m_Settings);
+                    baseColor = GetTerrainColor(normH, slope, m_Settings);
                 }
+
+                vertices[i].Color = ComputeFinalColor(offsetX + vertices[i].Position.x, offsetZ + vertices[i].Position.z, height, slope, baseColor);
             }
         }
 
