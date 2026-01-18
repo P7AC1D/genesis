@@ -28,6 +28,11 @@ set(ENGINE_SOURCES
     src/procedural/DrainageGraph.cpp
     src/procedural/RiverGenerator.cpp
     src/procedural/LakeGenerator.cpp
+    src/procedural/HydrologyData.cpp
+    src/procedural/WetlandDetector.cpp
+    src/procedural/BiomeIntent.cpp
+    src/procedural/ClimateGenerator.cpp
+    src/procedural/BiomeClassifier.cpp
     src/procedural/Water.cpp
     src/procedural/OceanMask.cpp
     

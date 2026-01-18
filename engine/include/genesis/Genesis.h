@@ -27,6 +27,11 @@
 #include "genesis/procedural/DrainageGraph.h"
 #include "genesis/procedural/RiverGenerator.h"
 #include "genesis/procedural/LakeGenerator.h"
+#include "genesis/procedural/HydrologyData.h"
+#include "genesis/procedural/WetlandDetector.h"
+#include "genesis/procedural/BiomeIntent.h"
+#include "genesis/procedural/ClimateGenerator.h"
+#include "genesis/procedural/BiomeClassifier.h"
 #include "genesis/procedural/Water.h"
 
 // World
