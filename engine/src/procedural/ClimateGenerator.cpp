@@ -12,12 +12,12 @@ namespace Genesis
     }
 
     void ClimateGenerator::Generate(const std::vector<float> &heightmap,
-                                     const HydrologyData &hydrology,
-                                     float seaLevel,
-                                     float heightScale,
-                                     float cellSize,
-                                     float worldOffsetX,
-                                     float worldOffsetZ)
+                                    const HydrologyData &hydrology,
+                                    float seaLevel,
+                                    float heightScale,
+                                    float cellSize,
+                                    float worldOffsetX,
+                                    float worldOffsetZ)
     {
         m_Data.Resize(hydrology.width, hydrology.depth);
         m_Data.Clear();
@@ -27,7 +27,7 @@ namespace Genesis
 
         // Section 27.1: Temperature field
         ComputeTemperature(heightmap, seaLevel, heightScale, cellSize,
-                          worldOffsetX, worldOffsetZ);
+                           worldOffsetX, worldOffsetZ);
 
         // Section 27.2: Moisture field
         ComputeMoisture(heightmap, hydrology, seaLevel, heightScale, cellSize,
@@ -38,11 +38,11 @@ namespace Genesis
     }
 
     void ClimateGenerator::ComputeTemperature(const std::vector<float> &heightmap,
-                                               float seaLevel,
-                                               float heightScale,
-                                               float cellSize,
-                                               float worldOffsetX,
-                                               float worldOffsetZ)
+                                              float seaLevel,
+                                              float heightScale,
+                                              float cellSize,
+                                              float worldOffsetX,
+                                              float worldOffsetZ)
     {
         // Section 27.1: Temperature Field (Latitude-Free)
         // tempNoise = FBM(x * climateFreq, z * climateFreq)
@@ -88,12 +88,12 @@ namespace Genesis
     }
 
     void ClimateGenerator::ComputeMoisture(const std::vector<float> &heightmap,
-                                            const HydrologyData &hydrology,
-                                            float seaLevel,
-                                            float heightScale,
-                                            float cellSize,
-                                            float worldOffsetX,
-                                            float worldOffsetZ)
+                                           const HydrologyData &hydrology,
+                                           float seaLevel,
+                                           float heightScale,
+                                           float cellSize,
+                                           float worldOffsetX,
+                                           float worldOffsetZ)
     {
         // Section 27.2: Moisture Field
         // moisture = humidity + waterProximityBoost - rainShadowPenalty - altitudePenalty
@@ -199,7 +199,7 @@ namespace Genesis
     }
 
     float ClimateGenerator::ComputeAltitudeCooling(float height, float seaLevel,
-                                                    float heightScale) const
+                                                   float heightScale) const
     {
         // Section 27.1: altitudeCooling = clamp((height - seaLevel) / heightScale, 0, 1)
         if (height <= seaLevel)
@@ -212,7 +212,7 @@ namespace Genesis
     }
 
     void ClimateGenerator::ComputeRainShadow(const std::vector<float> &heightmap,
-                                              float cellSize)
+                                             float cellSize)
     {
         // Rain shadow: mountains block moisture from prevailing wind direction
         // Assume prevailing wind from west (negative X direction)

@@ -32,6 +32,7 @@
 #include "genesis/procedural/BiomeIntent.h"
 #include "genesis/procedural/ClimateGenerator.h"
 #include "genesis/procedural/BiomeClassifier.h"
+#include "genesis/procedural/MaterialBlender.h"
 #include "genesis/procedural/Water.h"
 
 // World

@@ -6,7 +6,7 @@ namespace Genesis
 {
 
     void BiomeClassifier::Classify(const ClimateData &climate,
-                                    const WetlandData *wetlands)
+                                   const WetlandData *wetlands)
     {
         m_Data.Resize(climate.width, climate.depth);
         m_Data.Clear();
@@ -39,7 +39,7 @@ namespace Genesis
     }
 
     BiomeWeights BiomeClassifier::ComputeBiomeWeights(float temperature, float moisture,
-                                                       float fertility, bool isWetland) const
+                                                      float fertility, bool isWetland) const
     {
         BiomeWeights weights;
 

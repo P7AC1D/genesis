@@ -21,16 +21,16 @@ namespace Genesis
      */
     enum class BiomeType : uint8_t
     {
-        Polar = 0,       // Frozen, ice
-        Tundra = 1,      // Cold, sparse vegetation
-        Boreal = 2,      // Cold forest (taiga)
-        Temperate = 3,   // Moderate climate, deciduous
+        Polar = 0,         // Frozen, ice
+        Tundra = 1,        // Cold, sparse vegetation
+        Boreal = 2,        // Cold forest (taiga)
+        Temperate = 3,     // Moderate climate, deciduous
         Mediterranean = 4, // Warm, dry summers
-        Grassland = 5,   // Plains, savanna
-        Desert = 6,      // Hot and dry
-        Tropical = 7,    // Hot and wet
-        Rainforest = 8,  // Very hot and very wet
-        Wetland = 9,     // High moisture, low slope
+        Grassland = 5,     // Plains, savanna
+        Desert = 6,        // Hot and dry
+        Tropical = 7,      // Hot and wet
+        Rainforest = 8,    // Very hot and very wet
+        Wetland = 9,       // High moisture, low slope
 
         Count = 10
     };
@@ -184,7 +184,7 @@ namespace Genesis
          * Uses smooth thresholds for soft classification.
          */
         BiomeWeights ComputeBiomeWeights(float temperature, float moisture,
-                                          float fertility, bool isWetland) const;
+                                         float fertility, bool isWetland) const;
 
         /**
          * Smooth threshold function for biome boundaries.

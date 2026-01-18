@@ -33,6 +33,7 @@ set(ENGINE_SOURCES
     src/procedural/BiomeIntent.cpp
     src/procedural/ClimateGenerator.cpp
     src/procedural/BiomeClassifier.cpp
+    src/procedural/MaterialBlender.cpp
     src/procedural/Water.cpp
     src/procedural/OceanMask.cpp
     
