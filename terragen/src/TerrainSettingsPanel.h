@@ -76,8 +76,10 @@ namespace Genesis
         TerrainSettings m_TerrainSettings;
 
         // World settings
-        float m_SeaLevel = 2.0f;
+        float m_SeaLevelNormalized = 0.45f; // Normalized sea level (0.0-1.0)
+        float m_SeaLevel = 2.0f;            // Computed absolute sea level (display only)
         bool m_WaterEnabled = true;
+        bool m_UseOceanMask = true; // Use flood-fill ocean detection
         int m_ViewDistance = 3;
         uint32_t m_Seed = 42;
 

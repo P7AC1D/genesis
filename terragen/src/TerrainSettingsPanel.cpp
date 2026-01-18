@@ -20,8 +20,10 @@ namespace Genesis
 
         const auto &worldSettings = chunkManager.GetSettings();
         m_TerrainSettings = worldSettings.terrainSettings;
+        m_SeaLevelNormalized = worldSettings.seaLevelNormalized;
         m_SeaLevel = worldSettings.seaLevel;
         m_WaterEnabled = worldSettings.waterEnabled;
+        m_UseOceanMask = worldSettings.useOceanMask;
         m_ViewDistance = worldSettings.viewDistance;
         m_Seed = worldSettings.seed;
 
@@ -536,7 +538,7 @@ namespace Genesis
 
     void TerrainSettingsPanel::RenderWaterSection()
     {
-        if (ImGui::CollapsingHeader("Water"))
+        if (ImGui::CollapsingHeader("Water & Oceans"))
         {
             ImGui::Checkbox("Enable Water", &m_WaterEnabled);
             if (ImGui::IsItemHovered())
@@ -544,9 +546,31 @@ namespace Genesis
 
             if (m_WaterEnabled)
             {
-                ImGui::SliderFloat("Sea Level", &m_SeaLevel, -10.0f, 20.0f, "%.1f");
+                ImGui::Spacing();
+                ImGui::Text("Sea Level:");
+
+                // Normalized sea level slider (0.0 - 1.0)
+                if (ImGui::SliderFloat("Normalized", &m_SeaLevelNormalized, 0.0f, 1.0f, "%.2f"))
+                {
+                    // Compute absolute sea level for display
+                    m_SeaLevel = m_TerrainSettings.baseHeight +
+                                 m_TerrainSettings.heightScale * m_SeaLevelNormalized;
+                }
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Water plane height (world units).\nHigher sea level floods valleys and creates lakes/shorelines.");
+                    ImGui::SetTooltip("Sea level as fraction of terrain height range.\n0.45 is typical (45%% of height range).\nFormula: seaLevel = baseHeight + heightScale * normalized");
+
+                // Display computed absolute sea level (read-only)
+                ImGui::Text("Absolute: %.2f world units", m_SeaLevel);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Computed sea level in world space.\nChanges automatically when terrain scale changes.");
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Text("Ocean Detection:");
+
+                ImGui::Checkbox("Use Ocean Mask", &m_UseOceanMask);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Distinguishes oceans from inland lakes.\nOceans are below-sea cells connected to world boundaries.\nInland lakes are below-sea but isolated.");
             }
         }
     }
@@ -685,16 +709,24 @@ namespace Genesis
             return;
         }
 
+        // Compute absolute sea level from normalized value
+        m_SeaLevel = m_TerrainSettings.baseHeight +
+                     m_TerrainSettings.heightScale * m_SeaLevelNormalized;
+
         GEN_INFO("Applying new terrain settings:");
         GEN_INFO("  Height Scale: {} -> {}", m_ChunkManager->GetSettings().terrainSettings.heightScale, m_TerrainSettings.heightScale);
         GEN_INFO("  Noise Scale: {} -> {}", m_ChunkManager->GetSettings().terrainSettings.noiseScale, m_TerrainSettings.noiseScale);
         GEN_INFO("  Octaves: {} -> {}", m_ChunkManager->GetSettings().terrainSettings.octaves, m_TerrainSettings.octaves);
-        GEN_INFO("  Sea Level: {} -> {}", m_ChunkManager->GetSettings().seaLevel, m_SeaLevel);
+        GEN_INFO("  Sea Level (normalized): {} -> {}", m_ChunkManager->GetSettings().seaLevelNormalized, m_SeaLevelNormalized);
+        GEN_INFO("  Sea Level (absolute): {} -> {}", m_ChunkManager->GetSettings().seaLevel, m_SeaLevel);
+        GEN_INFO("  Use Ocean Mask: {} -> {}", m_ChunkManager->GetSettings().useOceanMask, m_UseOceanMask);
 
         auto &worldSettings = m_ChunkManager->GetSettings();
         worldSettings.terrainSettings = m_TerrainSettings;
+        worldSettings.seaLevelNormalized = m_SeaLevelNormalized;
         worldSettings.seaLevel = m_SeaLevel;
         worldSettings.waterEnabled = m_WaterEnabled;
+        worldSettings.useOceanMask = m_UseOceanMask;
         worldSettings.seed = m_Seed;
 
         if (worldSettings.viewDistance != m_ViewDistance)

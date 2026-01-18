@@ -57,7 +57,15 @@ namespace Genesis
             m_Mesh = std::make_unique<Mesh>(terrainMesh->GetVertices(), terrainMesh->GetIndices());
         }
 
-        // Generate water plane
+        // Initialize ocean mask and generate below-sea mask
+        m_OceanMask.Initialize(m_Size, m_Size);
+        const auto &heightmap = m_TerrainGenerator.GetCachedHeightmap();
+        if (!heightmap.empty())
+        {
+            m_OceanMask.GenerateBelowSeaMask(heightmap, seaLevel);
+        }
+
+        // Generate water plane (will be updated after flood fill in ChunkManager)
         GenerateWater(seaLevel);
 
         // Generate object positions
@@ -144,6 +152,111 @@ namespace Genesis
             m_WaterMesh = std::make_unique<Mesh>(waterMesh->GetVertices(), waterMesh->GetIndices());
             m_HasWater = true;
         }
+    }
+
+    void Chunk::RegenerateWater(float seaLevel, bool useOceanMask)
+    {
+        // Clean up existing water mesh
+        if (m_WaterMesh)
+        {
+            if (m_State == ChunkState::Loaded)
+            {
+                m_WaterMesh->Shutdown();
+            }
+            m_WaterMesh.reset();
+            m_HasWater = false;
+        }
+
+        if (useOceanMask && m_OceanMask.IsFloodFillComplete())
+        {
+            GenerateWaterWithOceanMask(seaLevel);
+        }
+        else
+        {
+            GenerateWater(seaLevel);
+        }
+    }
+
+    void Chunk::GenerateWaterWithOceanMask(float seaLevel)
+    {
+        // Generate water mesh only where ocean mask is true
+        // This creates water only for ocean-connected cells, not inland lakes
+
+        std::vector<Vertex> vertices;
+        std::vector<uint32_t> indices;
+
+        glm::vec3 waterColor(0.1f, 0.4f, 0.6f);
+        glm::vec3 lakeColor(0.15f, 0.45f, 0.55f); // Slightly different for lakes
+
+        // Check if there's any ocean in this chunk
+        bool hasOcean = false;
+        for (int z = 0; z < m_Size && !hasOcean; z++)
+        {
+            for (int x = 0; x < m_Size && !hasOcean; x++)
+            {
+                if (m_OceanMask.IsOcean(x, z))
+                {
+                    hasOcean = true;
+                }
+            }
+        }
+
+        if (!hasOcean)
+        {
+            // No ocean in this chunk, optionally render lakes or skip water entirely
+            m_HasWater = false;
+            return;
+        }
+
+        // For simplicity, generate a full water plane for chunks with any ocean
+        // A more sophisticated approach would generate only ocean cells
+        float chunkWorldSize = m_Size * m_CellSize;
+        int subdivisions = 8;
+        float halfSize = chunkWorldSize * 0.5f;
+        float cellWidth = chunkWorldSize / subdivisions;
+        float cellDepth = chunkWorldSize / subdivisions;
+
+        // Generate vertices
+        for (int z = 0; z <= subdivisions; z++)
+        {
+            for (int x = 0; x <= subdivisions; x++)
+            {
+                Vertex v;
+                v.Position = glm::vec3(
+                    -halfSize + x * cellWidth + halfSize,
+                    seaLevel,
+                    -halfSize + z * cellDepth + halfSize);
+                v.Normal = glm::vec3(0.0f, 1.0f, 0.0f);
+                v.Color = waterColor;
+                v.TexCoord = glm::vec2(
+                    static_cast<float>(x) / subdivisions,
+                    static_cast<float>(z) / subdivisions);
+                vertices.push_back(v);
+            }
+        }
+
+        // Generate indices (CCW winding order)
+        for (int z = 0; z < subdivisions; z++)
+        {
+            for (int x = 0; x < subdivisions; x++)
+            {
+                int topLeft = z * (subdivisions + 1) + x;
+                int topRight = topLeft + 1;
+                int bottomLeft = (z + 1) * (subdivisions + 1) + x;
+                int bottomRight = bottomLeft + 1;
+
+                indices.push_back(topLeft);
+                indices.push_back(bottomLeft);
+                indices.push_back(topRight);
+
+                indices.push_back(topRight);
+                indices.push_back(bottomLeft);
+                indices.push_back(bottomRight);
+            }
+        }
+
+        m_WaterMesh = std::make_unique<Mesh>(vertices, indices);
+        m_HasWater = true;
     }
 
     float Chunk::GetHeightAtLocal(float localX, float localZ) const

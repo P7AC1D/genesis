@@ -25,6 +25,7 @@ set(ENGINE_SOURCES
     src/procedural/TerrainGenerator.cpp
     src/procedural/TerrainIntent.cpp
     src/procedural/Water.cpp
+    src/procedural/OceanMask.cpp
     
     src/world/Chunk.cpp
     src/world/ChunkManager.cpp

@@ -262,6 +262,10 @@ namespace Genesis
 
         GEN_INFO("PerformRegeneration: starting...");
 
+        // Recompute absolute sea level from normalized value
+        m_Settings.ComputeSeaLevel();
+        GEN_INFO("Sea level: {} (normalized: {})", m_Settings.seaLevel, m_Settings.seaLevelNormalized);
+
         m_Device->WaitIdle();
 
         std::vector<glm::ivec2> chunksToRegenerate;
@@ -282,6 +286,12 @@ namespace Genesis
             LoadChunk(coord.x, coord.y);
         }
 
+        // Perform ocean flood fill across all loaded chunks
+        if (m_Settings.useOceanMask && m_Settings.waterEnabled)
+        {
+            PerformOceanFloodFill();
+        }
+
         RebuildObjectPositions();
         GEN_INFO("Regenerated {} chunks with updated settings", chunksToRegenerate.size());
     }
@@ -289,14 +299,172 @@ namespace Genesis
     void ChunkManager::UpdateTerrainSettings(const TerrainSettings &settings)
     {
         m_Settings.terrainSettings = settings;
+        m_Settings.ComputeSeaLevel(); // Recompute when terrain settings change
         RegenerateAllChunks();
     }
 
     void ChunkManager::UpdateWorldSettings(float seaLevel, bool waterEnabled)
     {
         m_Settings.seaLevel = seaLevel;
+        // Update normalized value to match absolute value
+        if (m_Settings.terrainSettings.heightScale > 0)
+        {
+            m_Settings.seaLevelNormalized = (seaLevel - m_Settings.terrainSettings.baseHeight) / m_Settings.terrainSettings.heightScale;
+        }
         m_Settings.waterEnabled = waterEnabled;
         RegenerateAllChunks();
+    }
+
+    void ChunkManager::UpdateSeaLevelNormalized(float seaLevelNormalized)
+    {
+        m_Settings.seaLevelNormalized = seaLevelNormalized;
+        m_Settings.ComputeSeaLevel();
+        RegenerateAllChunks();
+    }
+
+    bool ChunkManager::IsChunkAtWorldBoundary(int chunkX, int chunkZ, ChunkEdge edge) const
+    {
+        // For an infinite world, chunks at the boundary of currently loaded chunks
+        // are considered "at world boundary" for flood fill purposes.
+        // This allows ocean to flood in from edges of the visible world.
+
+        int viewDist = m_Settings.viewDistance;
+
+        switch (edge)
+        {
+        case ChunkEdge::NegativeX:
+            return (chunkX <= m_LastCameraChunk.x - viewDist);
+        case ChunkEdge::PositiveX:
+            return (chunkX >= m_LastCameraChunk.x + viewDist);
+        case ChunkEdge::NegativeZ:
+            return (chunkZ <= m_LastCameraChunk.y - viewDist);
+        case ChunkEdge::PositiveZ:
+            return (chunkZ >= m_LastCameraChunk.y + viewDist);
+        }
+        return false;
+    }
+
+    void ChunkManager::PerformOceanFloodFill()
+    {
+        GEN_DEBUG("PerformOceanFloodFill: starting ocean mask computation");
+
+        // Step 1: Run initial flood fill on all chunks from world boundaries
+        for (auto &[coord, chunk] : m_LoadedChunks)
+        {
+            int cx = coord.x;
+            int cz = coord.y;
+
+            auto isAtBoundary = [this, cx, cz](ChunkEdge edge)
+            {
+                return IsChunkAtWorldBoundary(cx, cz, edge);
+            };
+
+            chunk->GetOceanMask().FloodFillFromBoundary(isAtBoundary, nullptr);
+        }
+
+        // Step 2: Propagate ocean connectivity between neighboring chunks
+        // Repeat until no changes occur (convergence)
+        bool changed = true;
+        int iterations = 0;
+        const int maxIterations = 10; // Safety limit
+
+        while (changed && iterations < maxIterations)
+        {
+            changed = false;
+            iterations++;
+
+            for (auto &[coord, chunk] : m_LoadedChunks)
+            {
+                OceanMask &mask = chunk->GetOceanMask();
+                const ChunkOceanBoundary &boundary = mask.GetBoundary();
+
+                // Check each neighbor and propagate
+                // -X neighbor
+                if (auto *neighbor = GetChunkByCoord(coord.x - 1, coord.y))
+                {
+                    const auto &neighborBoundary = neighbor->GetOceanMask().GetBoundary();
+                    for (int z = 0; z < mask.GetDepth(); z++)
+                    {
+                        if (z < static_cast<int>(neighborBoundary.posX.size()) &&
+                            neighborBoundary.posX[z] && !mask.IsOcean(0, z) && mask.IsBelowSeaLevel(0, z))
+                        {
+                            mask.PropagateFromNeighbor(ChunkEdge::NegativeX, neighborBoundary.posX);
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+
+                // +X neighbor
+                if (auto *neighbor = GetChunkByCoord(coord.x + 1, coord.y))
+                {
+                    const auto &neighborBoundary = neighbor->GetOceanMask().GetBoundary();
+                    for (int z = 0; z < mask.GetDepth(); z++)
+                    {
+                        if (z < static_cast<int>(neighborBoundary.negX.size()) &&
+                            neighborBoundary.negX[z] && !mask.IsOcean(mask.GetWidth() - 1, z) &&
+                            mask.IsBelowSeaLevel(mask.GetWidth() - 1, z))
+                        {
+                            mask.PropagateFromNeighbor(ChunkEdge::PositiveX, neighborBoundary.negX);
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+
+                // -Z neighbor
+                if (auto *neighbor = GetChunkByCoord(coord.x, coord.y - 1))
+                {
+                    const auto &neighborBoundary = neighbor->GetOceanMask().GetBoundary();
+                    for (int x = 0; x < mask.GetWidth(); x++)
+                    {
+                        if (x < static_cast<int>(neighborBoundary.posZ.size()) &&
+                            neighborBoundary.posZ[x] && !mask.IsOcean(x, 0) && mask.IsBelowSeaLevel(x, 0))
+                        {
+                            mask.PropagateFromNeighbor(ChunkEdge::NegativeZ, neighborBoundary.posZ);
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+
+                // +Z neighbor
+                if (auto *neighbor = GetChunkByCoord(coord.x, coord.y + 1))
+                {
+                    const auto &neighborBoundary = neighbor->GetOceanMask().GetBoundary();
+                    for (int x = 0; x < mask.GetWidth(); x++)
+                    {
+                        if (x < static_cast<int>(neighborBoundary.negZ.size()) &&
+                            neighborBoundary.negZ[x] && !mask.IsOcean(x, mask.GetDepth() - 1) &&
+                            mask.IsBelowSeaLevel(x, mask.GetDepth() - 1))
+                        {
+                            mask.PropagateFromNeighbor(ChunkEdge::PositiveZ, neighborBoundary.negZ);
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        GEN_DEBUG("PerformOceanFloodFill: converged after {} iterations", iterations);
+
+        // Step 3: Regenerate water meshes using ocean mask
+        for (auto &[coord, chunk] : m_LoadedChunks)
+        {
+            chunk->RegenerateWater(m_Settings.seaLevel, m_Settings.useOceanMask);
+
+            // Re-upload water mesh if chunk is loaded
+            if (chunk->GetState() == ChunkState::Loaded && chunk->HasWater() && chunk->GetWaterMesh())
+            {
+                // The mesh needs to be uploaded to GPU
+                auto cpuWater = std::make_unique<Mesh>(
+                    chunk->GetWaterMesh()->GetVertices(),
+                    chunk->GetWaterMesh()->GetIndices());
+                chunk->m_WaterMesh->Shutdown();
+                chunk->m_WaterMesh = std::make_unique<Mesh>(*m_Device, cpuWater->GetVertices(), cpuWater->GetIndices());
+            }
+        }
     }
 
 }

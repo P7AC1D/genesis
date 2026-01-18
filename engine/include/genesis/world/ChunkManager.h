@@ -2,6 +2,7 @@
 
 #include "genesis/world/Chunk.h"
 #include "genesis/procedural/TerrainGenerator.h"
+#include "genesis/procedural/OceanMask.h"
 #include <glm/glm.hpp>
 #include <unordered_map>
 #include <memory>
@@ -23,12 +24,22 @@ namespace Genesis
         // World seed
         uint32_t seed = 12345;
 
-        // Water settings
-        float seaLevel = 2.0f; // Height of water surface
+        // Water settings - sea level computed from normalized value
+        // seaLevel = baseHeight + heightScale * seaLevelNormalized
+        float seaLevelNormalized = 0.45f; // Normalized sea level (0.0-1.0)
+        float seaLevel = 2.0f;            // Computed absolute sea level
         bool waterEnabled = true;
+        bool useOceanMask = true; // Use flood-fill ocean detection
 
         // Terrain settings
         TerrainSettings terrainSettings;
+
+        // Compute absolute sea level from terrain settings
+        void ComputeSeaLevel()
+        {
+            seaLevel = terrainSettings.baseHeight +
+                       terrainSettings.heightScale * seaLevelNormalized;
+        }
     };
 
     // Hash function for chunk coordinates
@@ -69,6 +80,7 @@ namespace Genesis
         void RegenerateAllChunks();
         void UpdateTerrainSettings(const TerrainSettings &settings);
         void UpdateWorldSettings(float seaLevel, bool waterEnabled);
+        void UpdateSeaLevelNormalized(float seaLevelNormalized);
 
         // Request chunk regeneration (deferred to next Update call)
         void RequestRegeneration() { m_NeedsRegeneration = true; }
@@ -81,6 +93,10 @@ namespace Genesis
         const std::vector<glm::vec3> &GetAllTreePositions() const { return m_AllTreePositions; }
         const std::vector<glm::vec3> &GetAllRockPositions() const { return m_AllRockPositions; }
 
+        // Ocean mask system
+        void SetUseOceanMask(bool useOceanMask) { m_Settings.useOceanMask = useOceanMask; }
+        bool GetUseOceanMask() const { return m_Settings.useOceanMask; }
+
     private:
         glm::ivec2 WorldToChunkCoord(float worldX, float worldZ) const;
         glm::vec3 ChunkCoordToWorld(int chunkX, int chunkZ) const;
@@ -88,6 +104,10 @@ namespace Genesis
         void UnloadChunk(int chunkX, int chunkZ);
         void RebuildObjectPositions();
         void PerformRegeneration();
+
+        // Ocean mask flood fill across all loaded chunks
+        void PerformOceanFloodFill();
+        bool IsChunkAtWorldBoundary(int chunkX, int chunkZ, ChunkEdge edge) const;
 
     private:
         VulkanDevice *m_Device = nullptr;
@@ -101,6 +121,7 @@ namespace Genesis
 
         glm::mat4 m_TerrainTransform{1.0f};
         bool m_NeedsRegeneration = false;
+        bool m_NeedsOceanFloodFill = false;
     };
 
 }
