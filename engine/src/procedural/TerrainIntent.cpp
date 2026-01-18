@@ -196,17 +196,15 @@ namespace Genesis
         settings.ridgeWeight = Saturate(intent.mountainCoverage);
 
         // Sharpness controls the ridge power exponent
-        // Low sharpness = soft, rounded peaks (1.2)
-        // High sharpness = dramatic peaks (2.4) - capped to prevent knife-edge spikes
-        settings.ridgePower = Lerp(1.2f, 2.4f, intent.mountainSharpness);
+        // Low sharpness = rounded mountains (1.4)
+        // High sharpness = jagged peaks (3.8)
+        settings.ridgePower = Lerp(1.4f, 3.8f, intent.mountainSharpness);
 
         // Peak boost adds extra definition to summits (reduced to prevent spikes)
         settings.peakBoost = intent.mountainSharpness * 0.4f;
 
-        // Ridge scale ties to continental scale and coverage for coherent mountain ranges
-        // Coverage influence prevents sparse mountain worlds from feeling grid-like
-        float ridgeScaleFactor = 0.7f * intent.continentalScale + 0.3f * intent.mountainCoverage;
-        settings.ridgeScale = Lerp(0.6f, 1.5f, ridgeScaleFactor);
+        // Ridge scale: larger continental scale = larger mountain features
+        settings.ridgeScale = Lerp(0.6f, 1.5f, intent.continentalScale);
 
         // Slope-based coloring: enable for realistic mountain cliff faces
         // More mountain coverage and sharpness = more aggressive slope coloring
