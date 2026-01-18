@@ -22,6 +22,8 @@
 // Procedural
 #include "genesis/procedural/Noise.h"
 #include "genesis/procedural/TerrainGenerator.h"
+#include "genesis/procedural/TerrainIntent.h"
+#include "genesis/procedural/GeologicalFields.h"
 #include "genesis/procedural/Water.h"
 
 // World

@@ -96,6 +96,7 @@ namespace Genesis
         TerrainSettings settings{};
 
         DeriveWorldScale(intent, settings);
+        DeriveContinentalField(intent, settings);
         DeriveNoiseSpectrum(intent, settings);
         DeriveMountains(intent, settings);
         DeriveTectonicUplift(intent, settings);
@@ -143,6 +144,30 @@ namespace Genesis
 
         // Base height: neutral offset (amplitude already handled by heightScale)
         settings.baseHeight = 0.0f;
+    }
+
+    void TerrainIntentMapper::DeriveContinentalField(const TerrainIntent &intent, TerrainSettings &settings)
+    {
+        // Enable continental field for geological terrain generation
+        settings.useContinentalField = true;
+
+        // Continental frequency: larger continentalScale = lower frequency = bigger landmasses
+        // Range: 0.0006 (small archipelagos) to 0.00015 (massive continents)
+        settings.continentalFrequency = Lerp(0.0006f, 0.00015f, intent.continentalScale);
+
+        // Ocean threshold: determines land/ocean ratio
+        // Larger landmasses (high scale) = slightly lower threshold (more land area)
+        settings.oceanThreshold = Lerp(0.48f, 0.42f, intent.continentalScale);
+
+        // Coastline blend epsilon: more chaos = rougher, more irregular coastlines
+        settings.coastlineBlend = Lerp(0.03f, 0.08f, intent.chaos);
+
+        // Ocean depth scales with elevation range
+        // elevationRange 0 = shallow seas (30), elevationRange 1 = deep oceans (80)
+        settings.oceanDepth = Lerp(30.0f, 80.0f, intent.elevationRange);
+
+        // Ocean floor variation: ruggedness affects underwater terrain
+        settings.oceanFloorVariation = Lerp(0.2f, 0.4f, intent.ruggedness);
     }
 
     void TerrainIntentMapper::DeriveNoiseSpectrum(const TerrainIntent &intent, TerrainSettings &settings)

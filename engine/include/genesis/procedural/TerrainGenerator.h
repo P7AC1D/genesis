@@ -18,6 +18,14 @@ namespace Genesis
         float heightScale = 10.0f;
         float baseHeight = 0.0f;
 
+        // Continental field settings (geological field system)
+        bool useContinentalField = true;      // Enable continental land/ocean generation
+        float continentalFrequency = 0.0003f; // Lower = larger landmasses
+        float oceanThreshold = 0.45f;         // Continental value below which = ocean
+        float coastlineBlend = 0.05f;         // Smoothstep epsilon for coastlines
+        float oceanDepth = 50.0f;             // Maximum ocean depth below sea level
+        float oceanFloorVariation = 0.3f;     // Noise variation on ocean floor
+
         // Noise settings
         uint32_t seed = 12345;
         float noiseScale = 0.05f;

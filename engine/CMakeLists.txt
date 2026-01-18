@@ -24,6 +24,7 @@ set(ENGINE_SOURCES
     src/procedural/Noise.cpp
     src/procedural/TerrainGenerator.cpp
     src/procedural/TerrainIntent.cpp
+    src/procedural/GeologicalFields.cpp
     src/procedural/Water.cpp
     src/procedural/OceanMask.cpp
     

@@ -25,6 +25,33 @@ namespace Genesis
 
     float TerrainGenerator::SampleRawHeight(float worldX, float worldZ) const
     {
+        // ========================================
+        // Layer 0: Continental Field (land vs ocean)
+        // ========================================
+        float continentalValue = 0.5f; // Default: fully land
+        float oceanMask = 0.0f;        // 0 = land, 1 = ocean
+
+        if (m_Settings.useContinentalField)
+        {
+            // Sample continental noise at very low frequency
+            float contX = worldX * m_Settings.continentalFrequency;
+            float contZ = worldZ * m_Settings.continentalFrequency;
+
+            float continentalNoise = m_Noise.FBM(contX, contZ, 2, 0.5f, 2.0f);
+            continentalValue = (continentalNoise + 1.0f) * 0.5f; // Map to [0, 1]
+
+            // Compute ocean mask via smoothstep
+            // Values below (threshold - epsilon) = 1.0 (ocean)
+            // Values above (threshold + epsilon) = 0.0 (land)
+            float threshold = m_Settings.oceanThreshold;
+            float epsilon = m_Settings.coastlineBlend;
+
+            float t = std::clamp((continentalValue - (threshold - epsilon)) /
+                                     ((threshold + epsilon) - (threshold - epsilon)),
+                                 0.0f, 1.0f);
+            oceanMask = 1.0f - (t * t * (3.0f - 2.0f * t)); // Inverted smoothstep
+        }
+
         float noiseX = worldX * m_Settings.noiseScale;
         float noiseZ = worldZ * m_Settings.noiseScale;
 
@@ -102,6 +129,9 @@ namespace Genesis
                 upliftMask = std::pow(upliftMask, m_Settings.upliftPower);
             }
 
+            // Mountains don't exist in ocean areas
+            upliftMask *= (1.0f - oceanMask);
+
             // Blend base terrain with mountains based on uplift mask
             float ridgeContribution = ridgeNoise * m_Settings.ridgeWeight * upliftMask;
             float baseWeight = 1.0f - (m_Settings.ridgeWeight * upliftMask);
@@ -111,7 +141,33 @@ namespace Genesis
         // Map from [-1, 1] to [0, 1] and convert to world height
         // NO shaping here - shaping is applied ONCE after erosion in ApplyPeakShaping
         height = (height + 1.0f) * 0.5f;
-        return m_Settings.baseHeight + height * m_Settings.heightScale;
+        float worldHeight = m_Settings.baseHeight + height * m_Settings.heightScale;
+
+        // ========================================
+        // Apply ocean depth bias
+        // ========================================
+        // Ocean areas are pushed down below sea level
+        if (m_Settings.useContinentalField && oceanMask > 0.0f)
+        {
+            // Compute ocean depth with variation
+            float oceanDepth = m_Settings.oceanDepth;
+
+            // Add variation to ocean floor
+            if (m_Settings.oceanFloorVariation > 0.0f)
+            {
+                float varX = worldX * m_Settings.continentalFrequency * 5.0f;
+                float varZ = worldZ * m_Settings.continentalFrequency * 5.0f;
+
+                float variation = m_Noise.FBM(varX + 800.0f, varZ + 900.0f, 2, 0.5f, 2.0f);
+                oceanDepth += variation * oceanDepth * m_Settings.oceanFloorVariation;
+            }
+
+            // Depth fades in with ocean mask (shallow near coast, deep in open ocean)
+            // Use squared mask for natural depth curve
+            worldHeight -= oceanDepth * oceanMask * oceanMask;
+        }
+
+        return worldHeight;
     }
 
     void TerrainGenerator::ApplySlopeErosion(std::vector<float> &heightmap, int width, int depth) const

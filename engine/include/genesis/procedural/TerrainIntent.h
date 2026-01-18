@@ -98,6 +98,7 @@ namespace Genesis
         static float Smoothstep(float t) { return t * t * (3.0f - 2.0f * t); }
 
         static void DeriveWorldScale(const TerrainIntent &intent, TerrainSettings &settings);
+        static void DeriveContinentalField(const TerrainIntent &intent, TerrainSettings &settings);
         static void DeriveNoiseSpectrum(const TerrainIntent &intent, TerrainSettings &settings);
         static void DeriveMountains(const TerrainIntent &intent, TerrainSettings &settings);
         static void DeriveTectonicUplift(const TerrainIntent &intent, TerrainSettings &settings);
