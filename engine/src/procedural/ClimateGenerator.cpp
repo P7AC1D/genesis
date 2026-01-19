@@ -37,6 +37,32 @@ namespace Genesis
         ComputeFertility(hydrology);
     }
 
+    void ClimateGenerator::Generate(const std::vector<float> &heightmap,
+                                    int gridWidth,
+                                    int gridDepth,
+                                    float seaLevel,
+                                    float heightScale,
+                                    float cellSize,
+                                    float worldOffsetX,
+                                    float worldOffsetZ)
+    {
+        // Version without hydrology data - uses explicit grid dimensions
+        // Uses simplified world-coherent calculations to ensure seamless chunk boundaries
+        m_Data.Resize(gridWidth, gridDepth);
+        m_Data.Clear();
+
+        // Section 27.1: Temperature field (world-coherent)
+        ComputeTemperature(heightmap, seaLevel, heightScale, cellSize,
+                           worldOffsetX, worldOffsetZ);
+
+        // Section 27.2: Simplified moisture field (world-coherent, no chunk-local rain shadow)
+        ComputeSimplifiedMoisture(heightmap, seaLevel, heightScale, cellSize,
+                                  worldOffsetX, worldOffsetZ);
+
+        // Section 27.3: Simplified fertility field
+        ComputeSimplifiedFertility();
+    }
+
     void ClimateGenerator::ComputeTemperature(const std::vector<float> &heightmap,
                                               float seaLevel,
                                               float heightScale,
@@ -284,6 +310,90 @@ namespace Genesis
         if (!m_Data.InBounds(x, z))
             return 0.0f;
         return m_Data.fertility[m_Data.Index(x, z)];
+    }
+
+    void ClimateGenerator::ComputeSimplifiedMoisture(const std::vector<float> &heightmap,
+                                                     float seaLevel,
+                                                     float heightScale,
+                                                     float cellSize,
+                                                     float worldOffsetX,
+                                                     float worldOffsetZ)
+    {
+        // Simplified moisture calculation using only world-coherent noise
+        // No chunk-local rain shadow or hydrology - ensures seamless boundaries
+
+        for (int z = 0; z < m_Data.depth; z++)
+        {
+            for (int x = 0; x < m_Data.width; x++)
+            {
+                size_t idx = m_Data.Index(x, z);
+
+                // World coordinates for noise sampling
+                float worldX = worldOffsetX + x * cellSize;
+                float worldZ = worldOffsetZ + z * cellSize;
+
+                // Base humidity from settings
+                float humidity = m_Settings.basePrecipitation;
+
+                // Add precipitation noise variation (world-coherent)
+                float precipNoise = m_Noise->FBM(
+                    worldX * m_Settings.precipitationFrequency,
+                    worldZ * m_Settings.precipitationFrequency,
+                    3,    // octaves
+                    0.5f, // persistence
+                    2.0f  // lacunarity
+                );
+                humidity += precipNoise * m_Settings.precipitationVariation;
+
+                // Altitude penalty (high elevations are drier)
+                float height = heightmap[idx];
+                float altitudePenalty = 0.0f;
+                if (height > seaLevel)
+                {
+                    float normalizedAlt = (height - seaLevel) / heightScale;
+                    altitudePenalty = normalizedAlt * 0.3f;
+                }
+
+                // Evaporation based on aridity setting
+                float evaporationLoss = m_Settings.evaporationRate * 0.2f;
+
+                // Simplified formula (no rain shadow, no water proximity)
+                float moisture = humidity - altitudePenalty - evaporationLoss;
+
+                // Clamp to [0, 1]
+                m_Data.moisture[idx] = std::clamp(moisture, 0.0f, 1.0f);
+            }
+        }
+    }
+
+    void ClimateGenerator::ComputeSimplifiedFertility()
+    {
+        // Simplified fertility based on temperature and moisture
+        // No slope data available without hydrology
+
+        for (int z = 0; z < m_Data.depth; z++)
+        {
+            for (int x = 0; x < m_Data.width; x++)
+            {
+                size_t idx = m_Data.Index(x, z);
+
+                float temperature = m_Data.temperature[idx];
+                float moisture = m_Data.moisture[idx];
+
+                // Fertility is high when temperature is moderate and moisture is adequate
+                // Temperature in [-1, 1], optimal around 0.2-0.5
+                float tempFactor = 1.0f - std::abs(temperature - 0.3f);
+                tempFactor = std::clamp(tempFactor, 0.0f, 1.0f);
+
+                // Moisture directly affects fertility
+                float moistFactor = moisture;
+
+                // Combined fertility - use vegetationDensity as fertility multiplier
+                float fertility = tempFactor * moistFactor * m_Settings.vegetationDensity;
+
+                m_Data.fertility[idx] = std::clamp(fertility, 0.0f, 1.0f);
+            }
+        }
     }
 
 }

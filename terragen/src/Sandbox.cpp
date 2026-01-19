@@ -293,7 +293,7 @@ namespace Genesis
         worldSettings.terrainSettings.persistence = 0.5f;
         worldSettings.terrainSettings.lacunarity = 2.0f;
         worldSettings.terrainSettings.flatShading = true;
-        worldSettings.terrainSettings.useHeightColors = true;
+        worldSettings.terrainSettings.useBiomeColors = true;
 
         // Domain warping for organic terrain
         worldSettings.terrainSettings.useWarp = true;

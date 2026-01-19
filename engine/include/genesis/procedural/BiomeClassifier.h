@@ -2,6 +2,7 @@
 
 #include "genesis/procedural/ClimateGenerator.h"
 #include "genesis/procedural/WetlandDetector.h"
+#include <glm/glm.hpp>
 #include <vector>
 #include <array>
 
@@ -177,6 +178,18 @@ namespace Genesis
          * Get biome name as string.
          */
         static const char *GetBiomeName(BiomeType type);
+
+        /**
+         * Get the canonical color for a biome type.
+         * Used for both terrain rendering and debug visualization.
+         */
+        static glm::vec3 GetBiomeColor(BiomeType type);
+
+        /**
+         * Get blended color from biome weights.
+         * Blends colors from all contributing biomes based on their weights.
+         */
+        static glm::vec3 GetBlendedBiomeColor(const BiomeWeights &weights);
 
     private:
         /**

@@ -1,4 +1,5 @@
 #include "genesis/procedural/TerrainDebugView.h"
+#include "genesis/procedural/BiomeClassifier.h"
 #include <algorithm>
 #include <cmath>
 
@@ -48,31 +49,8 @@ namespace Genesis
 
     glm::vec3 TerrainDebugView::GetBiomeColor(BiomeType biome)
     {
-        switch (biome)
-        {
-        case BiomeType::Polar:
-            return glm::vec3(0.95f, 0.95f, 1.0f); // White-blue
-        case BiomeType::Tundra:
-            return glm::vec3(0.7f, 0.75f, 0.8f); // Gray-blue
-        case BiomeType::Boreal:
-            return glm::vec3(0.2f, 0.4f, 0.3f); // Dark green
-        case BiomeType::Temperate:
-            return glm::vec3(0.3f, 0.6f, 0.3f); // Medium green
-        case BiomeType::Mediterranean:
-            return glm::vec3(0.6f, 0.7f, 0.4f); // Olive
-        case BiomeType::Grassland:
-            return glm::vec3(0.7f, 0.8f, 0.4f); // Yellow-green
-        case BiomeType::Desert:
-            return glm::vec3(0.9f, 0.8f, 0.5f); // Sandy yellow
-        case BiomeType::Tropical:
-            return glm::vec3(0.2f, 0.7f, 0.3f); // Bright green
-        case BiomeType::Rainforest:
-            return glm::vec3(0.1f, 0.5f, 0.2f); // Deep green
-        case BiomeType::Wetland:
-            return glm::vec3(0.3f, 0.5f, 0.5f); // Teal
-        default:
-            return glm::vec3(0.5f, 0.5f, 0.5f); // Gray
-        }
+        // Delegate to BiomeClassifier's canonical color palette
+        return BiomeClassifier::GetBiomeColor(biome);
     }
 
     glm::vec3 TerrainDebugView::GetMaterialColor(MaterialType material)

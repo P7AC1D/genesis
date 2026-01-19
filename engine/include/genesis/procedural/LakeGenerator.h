@@ -30,7 +30,10 @@ namespace Genesis
     struct LakeSettings
     {
         // Minimum cells to form a lake (avoid tiny puddles)
-        int minBasinSize = 4;
+        int minBasinSize = 50;
+
+        // Minimum depth difference between basin floor and spill point (world units)
+        float minBasinDepth = 1.0f;
 
         // Maximum lake depth (for visual/gameplay limits)
         float maxDepth = 50.0f;

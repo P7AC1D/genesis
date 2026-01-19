@@ -478,68 +478,9 @@ namespace Genesis
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Uses per-face normals for a faceted low-poly look.\nOff = smoother lighting (if supported by the mesh).");
 
-            ImGui::Checkbox("Height-Based Colors", &m_TerrainSettings.useHeightColors);
+            ImGui::Checkbox("Biome-Based Colors", &m_TerrainSettings.useBiomeColors);
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Applies water/sand/grass/rock/snow bands based on height.\nIf off, terrain uses the default material color.");
-
-            if (m_TerrainSettings.useHeightColors)
-            {
-                ImGui::Text("Height Thresholds (normalized):");
-                ImGui::SliderFloat("Water Level", &m_TerrainSettings.waterLevel, 0.0f, 1.0f, "%.2f");
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Below this height = water color band.\nValues are normalized: 0 = lowest, 1 = highest.");
-
-                ImGui::SliderFloat("Sand Level", &m_TerrainSettings.sandLevel, 0.0f, 1.0f, "%.2f");
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Between water and sand level = beach/shoreline band.\nTip: keep Sand Level slightly above Water Level.");
-
-                ImGui::SliderFloat("Grass Level", &m_TerrainSettings.grassLevel, 0.0f, 1.0f, "%.2f");
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Upper limit for grass band.\nAbove this, terrain transitions toward rock/snow.");
-
-                ImGui::SliderFloat("Rock Level", &m_TerrainSettings.rockLevel, 0.0f, 1.0f, "%.2f");
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Above this height = rock/snow.\nTip: higher Rock Level makes less exposed rock.");
-
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Text("Slope-Based Coloring:");
-
-                if (ImGui::Checkbox("Enable Slope Coloring", &m_TerrainSettings.useSlopeColoring))
-                {
-                    m_NeedsPreviewUpdate = true;
-                }
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Colors steep slopes as rock/cliff regardless of height.\nCreates realistic cliff faces on mountains.");
-
-                if (m_TerrainSettings.useSlopeColoring)
-                {
-                    if (ImGui::SliderFloat("Slope Threshold", &m_TerrainSettings.slopeColorThreshold, 0.0f, 1.0f, "%.2f"))
-                    {
-                        m_NeedsPreviewUpdate = true;
-                    }
-                    if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("Slope value where rock color starts.\n0 = even flat surfaces become rock\n0.4 = moderate slopes\n0.7 = only steep cliffs");
-
-                    if (ImGui::SliderFloat("Slope Blend", &m_TerrainSettings.slopeColorBlend, 0.0f, 0.5f, "%.2f"))
-                    {
-                        m_NeedsPreviewUpdate = true;
-                    }
-                    if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("Transition smoothness from vegetation to rock.\nLower = sharper edge, higher = gradual blend.");
-
-                    float slopeColor[3] = {m_TerrainSettings.steepSlopeColor.r,
-                                           m_TerrainSettings.steepSlopeColor.g,
-                                           m_TerrainSettings.steepSlopeColor.b};
-                    if (ImGui::ColorEdit3("Cliff Color", slopeColor))
-                    {
-                        m_TerrainSettings.steepSlopeColor = glm::vec3(slopeColor[0], slopeColor[1], slopeColor[2]);
-                        m_NeedsPreviewUpdate = true;
-                    }
-                    if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("Color used for steep cliff faces.\nTypically a rock/stone gray.");
-                }
-            }
+                ImGui::SetTooltip("Uses biome classification to color terrain.\nColors blend smoothly between adjacent biomes.\nRequires hydrology computation for accurate results.");
         }
     }
 

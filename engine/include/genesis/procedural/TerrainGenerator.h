@@ -2,6 +2,8 @@
 
 #include "genesis/procedural/Noise.h"
 #include "genesis/procedural/TerrainDebugView.h"
+#include "genesis/procedural/MaterialBlender.h"
+#include "genesis/procedural/BiomeClassifier.h"
 #include "genesis/renderer/Mesh.h"
 #include <memory>
 
@@ -74,18 +76,8 @@ namespace Genesis
         // Low-poly style
         bool flatShading = true; // Use face normals instead of smooth normals
 
-        // Color bands based on height
-        bool useHeightColors = true;
-        float waterLevel = 0.2f;
-        float sandLevel = 0.25f;
-        float grassLevel = 0.6f;
-        float rockLevel = 0.8f;
-
-        // Slope-based coloring for realistic mountains
-        bool useSlopeColoring = true;                   // Color steep slopes as rock/cliff
-        float slopeColorThreshold = 0.4f;               // Slope value where rock starts (0-1)
-        float slopeColorBlend = 0.2f;                   // Transition smoothness
-        glm::vec3 steepSlopeColor{0.55f, 0.52f, 0.48f}; // Rock/cliff color
+        // Biome-based coloring
+        bool useBiomeColors = true; // Use biome classification for terrain colors
     };
 
     class TerrainGenerator
@@ -103,6 +95,12 @@ namespace Genesis
         // Generate terrain mesh at world offset (for chunked terrain)
         std::shared_ptr<Mesh> GenerateAtOffset(float offsetX, float offsetZ);
 
+        // Generate terrain mesh at world offset with material-based coloring
+        std::shared_ptr<Mesh> GenerateAtOffset(float offsetX, float offsetZ, const MaterialBlender *materialBlender);
+
+        // Generate terrain mesh at world offset with biome-based coloring
+        std::shared_ptr<Mesh> GenerateAtOffset(float offsetX, float offsetZ, const MaterialBlender *materialBlender, const BiomeClassifier *biomeClassifier);
+
         // Generate heightmap array at local origin
         std::vector<float> GenerateHeightmap();
 
@@ -115,11 +113,8 @@ namespace Genesis
         // Get the cached heightmap (must call GenerateHeightmap first)
         const std::vector<float> &GetCachedHeightmap() const { return m_CachedHeightmap; }
 
-        // Get color for height and slope value
-        static glm::vec3 GetTerrainColor(float normalizedHeight, float slope, const TerrainSettings &settings);
-
-        // Legacy: Get color for height value only (no slope)
-        static glm::vec3 GetHeightColor(float normalizedHeight, const TerrainSettings &settings);
+        // Get color from material weights (material-based coloring)
+        static glm::vec3 GetMaterialColor(const MaterialWeights &weights);
 
         // Sample raw height at world position (no erosion/shaping)
         // Useful for querying terrain height before full generation
@@ -132,7 +127,7 @@ namespace Genesis
         void ApplyPeakShaping(std::vector<float> &heightmap, int width, int depth) const;
 
         // Build mesh from heightmap
-        std::shared_ptr<Mesh> BuildMeshFromHeightmap(const std::vector<float> &heightmap, float offsetX, float offsetZ) const;
+        std::shared_ptr<Mesh> BuildMeshFromHeightmap(const std::vector<float> &heightmap, float offsetX, float offsetZ, const MaterialBlender *materialBlender = nullptr, const BiomeClassifier *biomeClassifier = nullptr) const;
 
         // Bilinear height sampling for hydraulic erosion
         float SampleHeightBilinear(const std::vector<float> &heightmap, int width, float x, float z) const;

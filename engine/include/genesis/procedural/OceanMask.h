@@ -129,6 +129,20 @@ namespace Genesis
         const std::vector<bool> &GetBelowSeaMask() const { return m_BelowSeaMask; }
 
         /**
+         * Check if any cell is below sea level
+         * Used to determine if water plane should be generated at all
+         */
+        bool HasAnyBelowSeaLevel() const
+        {
+            for (bool b : m_BelowSeaMask)
+            {
+                if (b)
+                    return true;
+            }
+            return false;
+        }
+
+        /**
          * Check if flood fill has been performed
          */
         bool IsFloodFillComplete() const { return m_FloodFillComplete; }

@@ -59,8 +59,12 @@ namespace Genesis
                                                  pit.x, pit.y,
                                                  maxFillHeight, visited);
 
-                // Only keep basins above minimum size
-                if (static_cast<int>(basin.cells.size()) >= m_Settings.minBasinSize)
+                // Only keep basins above minimum size AND minimum depth
+                float basinDepth = basin.spillHeight - basin.basinFloor;
+                bool meetsSize = static_cast<int>(basin.cells.size()) >= m_Settings.minBasinSize;
+                bool meetsDepth = basinDepth >= m_Settings.minBasinDepth;
+
+                if (meetsSize && meetsDepth)
                 {
                     int lakeIndex = static_cast<int>(m_Network.lakes.size());
 

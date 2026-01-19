@@ -518,59 +518,36 @@ namespace Genesis
         return h0 * (1 - fz) + h1 * fz;
     }
 
-    glm::vec3 TerrainGenerator::GetHeightColor(float normalizedHeight, const TerrainSettings &settings)
+    glm::vec3 TerrainGenerator::GetMaterialColor(const MaterialWeights &weights)
     {
-        // Low-poly color palette
-        const glm::vec3 deepWater(0.1f, 0.3f, 0.5f);
-        const glm::vec3 shallowWater(0.2f, 0.5f, 0.7f);
-        const glm::vec3 sand(0.76f, 0.70f, 0.50f);
-        const glm::vec3 grass(0.34f, 0.55f, 0.25f);
-        const glm::vec3 darkGrass(0.24f, 0.42f, 0.18f);
-        const glm::vec3 rock(0.5f, 0.5f, 0.5f);
-        const glm::vec3 snow(0.95f, 0.95f, 0.97f);
+        // Material color palette for biome-based rendering
+        static const glm::vec3 materialColors[] = {
+            glm::vec3(0.50f, 0.48f, 0.45f), // Rock - gray
+            glm::vec3(0.45f, 0.35f, 0.25f), // Dirt - brown
+            glm::vec3(0.34f, 0.55f, 0.25f), // Grass - green
+            glm::vec3(0.76f, 0.70f, 0.50f), // Sand - tan
+            glm::vec3(0.95f, 0.95f, 0.97f), // Snow - white
+            glm::vec3(0.75f, 0.85f, 0.95f), // Ice - light blue
+            glm::vec3(0.35f, 0.28f, 0.20f), // Mud - dark brown
+            glm::vec3(0.15f, 0.45f, 0.55f), // Water - blue (shouldn't be rendered here)
+        };
 
-        if (normalizedHeight < settings.waterLevel * 0.5f)
-            return deepWater;
-        if (normalizedHeight < settings.waterLevel)
-            return shallowWater;
-        if (normalizedHeight < settings.sandLevel)
-            return sand;
-        if (normalizedHeight < settings.grassLevel * 0.7f)
-            return grass;
-        if (normalizedHeight < settings.grassLevel)
-            return darkGrass;
-        if (normalizedHeight < settings.rockLevel)
-            return rock;
-        return snow;
+        // Blend colors based on material weights
+        glm::vec3 finalColor(0.0f);
+
+        for (size_t i = 0; i < static_cast<size_t>(MaterialType::Count); i++)
+        {
+            float weight = weights.weights[i];
+            if (weight > 0.0f)
+            {
+                finalColor += materialColors[i] * weight;
+            }
+        }
+
+        return finalColor;
     }
 
-    glm::vec3 TerrainGenerator::GetTerrainColor(float normalizedHeight, float slope, const TerrainSettings &settings)
-    {
-        // Get base color from height
-        glm::vec3 heightColor = GetHeightColor(normalizedHeight, settings);
-
-        // If slope coloring is disabled, return height-based color
-        if (!settings.useSlopeColoring)
-            return heightColor;
-
-        // Don't apply slope coloring to water or snow (they should remain their colors)
-        if (normalizedHeight < settings.sandLevel || normalizedHeight >= settings.rockLevel)
-            return heightColor;
-
-        // Calculate slope blend factor using smoothstep for gradual transition
-        // slope: 0 = flat, 1 = vertical cliff
-        float blendStart = settings.slopeColorThreshold;
-        float blendEnd = settings.slopeColorThreshold + settings.slopeColorBlend;
-
-        // Smoothstep interpolation
-        float t = std::clamp((slope - blendStart) / (blendEnd - blendStart + 0.001f), 0.0f, 1.0f);
-        float slopeBlend = t * t * (3.0f - 2.0f * t);
-
-        // Blend between height color and steep slope color (rock/cliff)
-        return heightColor * (1.0f - slopeBlend) + settings.steepSlopeColor * slopeBlend;
-    }
-
-    std::shared_ptr<Mesh> TerrainGenerator::BuildMeshFromHeightmap(const std::vector<float> &heightmap, float offsetX, float offsetZ) const
+    std::shared_ptr<Mesh> TerrainGenerator::BuildMeshFromHeightmap(const std::vector<float> &heightmap, float offsetX, float offsetZ, const MaterialBlender *materialBlender, const BiomeClassifier *biomeClassifier) const
     {
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
@@ -589,6 +566,9 @@ namespace Genesis
         // Debug visualization setup
         bool showDebug = m_Settings.debugView.activeView != DebugViewType::None;
         SimplexNoise debugNoise(m_Settings.seed);
+
+        // Default color when no biome/material data available
+        const glm::vec3 defaultGreen(0.34f, 0.55f, 0.25f);
 
         auto ComputeFinalColor = [&](float wx, float wz, float h, float s, glm::vec3 base) -> glm::vec3
         {
@@ -636,6 +616,23 @@ namespace Genesis
             return glm::mix(base, debugColor, opacity);
         };
 
+        // Helper to get color for a cell
+        auto GetCellColor = [&](int x, int z) -> glm::vec3
+        {
+            // Priority: biome colors > material colors > default green
+            if (m_Settings.useBiomeColors && biomeClassifier && biomeClassifier->GetData().width > 0)
+            {
+                BiomeWeights weights = biomeClassifier->GetBiomeWeights(x, z);
+                return BiomeClassifier::GetBlendedBiomeColor(weights);
+            }
+            else if (materialBlender && materialBlender->GetData().width > 0)
+            {
+                MaterialWeights weights = materialBlender->GetMaterialWeights(x, z);
+                return GetMaterialColor(weights);
+            }
+            return defaultGreen;
+        };
+
         if (m_Settings.flatShading)
         {
             // Flat shading: each triangle has its own vertices with face normal
@@ -661,11 +658,12 @@ namespace Genesis
                     // Triangle 1: p00, p01, p10 (CCW winding)
                     glm::vec3 normal1 = glm::normalize(glm::cross(p01 - p00, p10 - p00));
                     float avgH1 = (h00 + h10 + h01) / 3.0f;
-                    float normH1 = (avgH1 - minHeight) / heightRange;
 
                     // Calculate slope from normal (0 = flat, 1 = vertical cliff)
                     float slope1 = 1.0f - std::abs(normal1.y);
-                    glm::vec3 baseColor1 = m_Settings.useHeightColors ? GetTerrainColor(normH1, slope1, m_Settings) : glm::vec3(0.34f, 0.55f, 0.25f);
+
+                    // Get color for this cell
+                    glm::vec3 baseColor1 = GetCellColor(x, z);
 
                     glm::vec3 c1 = (p00 + p01 + p10) / 3.0f;
                     glm::vec3 color1 = ComputeFinalColor(offsetX + c1.x, offsetZ + c1.z, avgH1, slope1, baseColor1);
@@ -681,11 +679,12 @@ namespace Genesis
                     // Triangle 2: p10, p01, p11 (CCW winding)
                     glm::vec3 normal2 = glm::normalize(glm::cross(p01 - p10, p11 - p10));
                     float avgH2 = (h10 + h11 + h01) / 3.0f;
-                    float normH2 = (avgH2 - minHeight) / heightRange;
 
                     // Calculate slope from normal (0 = flat, 1 = vertical cliff)
                     float slope2 = 1.0f - std::abs(normal2.y);
-                    glm::vec3 baseColor2 = m_Settings.useHeightColors ? GetTerrainColor(normH2, slope2, m_Settings) : glm::vec3(0.34f, 0.55f, 0.25f);
+
+                    // Get color for this cell
+                    glm::vec3 baseColor2 = GetCellColor(x, z);
 
                     glm::vec3 c2 = (p10 + p01 + p11) / 3.0f;
                     glm::vec3 color2 = ComputeFinalColor(offsetX + c2.x, offsetZ + c2.z, avgH2, slope2, baseColor2);
@@ -711,8 +710,8 @@ namespace Genesis
                     float worldZ = z * m_Settings.cellSize;
                     float height = heightmap[z * width + x];
 
-                    float normH = (height - minHeight) / heightRange;
-                    glm::vec3 color = m_Settings.useHeightColors ? GetHeightColor(normH, m_Settings) : glm::vec3(0.34f, 0.55f, 0.25f);
+                    // Get color for this cell
+                    glm::vec3 color = GetCellColor(x, z);
 
                     vertices.push_back({glm::vec3(worldX, height, worldZ),
                                         glm::vec3(0.0f, 1.0f, 0.0f),
@@ -761,16 +760,9 @@ namespace Genesis
                 vertices[i].Normal = glm::normalize(normals[i]);
 
                 float height = vertices[i].Position.y;
-                float normH = (height - minHeight) / heightRange;
                 float slope = 1.0f - std::abs(vertices[i].Normal.y);
 
                 glm::vec3 baseColor = vertices[i].Color;
-
-                // Recalculate color with slope information now that we have normals
-                if (m_Settings.useHeightColors && m_Settings.useSlopeColoring)
-                {
-                    baseColor = GetTerrainColor(normH, slope, m_Settings);
-                }
 
                 vertices[i].Color = ComputeFinalColor(offsetX + vertices[i].Position.x, offsetZ + vertices[i].Position.z, height, slope, baseColor);
             }
@@ -789,6 +781,26 @@ namespace Genesis
     {
         GenerateHeightmapAtOffset(offsetX, offsetZ);
         return BuildMeshFromHeightmap(m_CachedHeightmap, offsetX, offsetZ);
+    }
+
+    std::shared_ptr<Mesh> TerrainGenerator::GenerateAtOffset(float offsetX, float offsetZ, const MaterialBlender *materialBlender)
+    {
+        // Use existing heightmap if available, otherwise generate it
+        if (m_CachedHeightmap.empty())
+        {
+            GenerateHeightmapAtOffset(offsetX, offsetZ);
+        }
+        return BuildMeshFromHeightmap(m_CachedHeightmap, offsetX, offsetZ, materialBlender);
+    }
+
+    std::shared_ptr<Mesh> TerrainGenerator::GenerateAtOffset(float offsetX, float offsetZ, const MaterialBlender *materialBlender, const BiomeClassifier *biomeClassifier)
+    {
+        // Use existing heightmap if available, otherwise generate it
+        if (m_CachedHeightmap.empty())
+        {
+            GenerateHeightmapAtOffset(offsetX, offsetZ);
+        }
+        return BuildMeshFromHeightmap(m_CachedHeightmap, offsetX, offsetZ, materialBlender, biomeClassifier);
     }
 
 }

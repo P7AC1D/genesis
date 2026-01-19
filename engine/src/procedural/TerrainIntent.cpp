@@ -205,17 +205,6 @@ namespace Genesis
 
         // Ridge scale: larger continental scale = larger mountain features
         settings.ridgeScale = Lerp(0.6f, 1.5f, intent.continentalScale);
-
-        // Slope-based coloring: enable for realistic mountain cliff faces
-        // More mountain coverage and sharpness = more aggressive slope coloring
-        settings.useSlopeColoring = intent.mountainCoverage > 0.1f;
-
-        // Slope threshold: sharper mountains need lower threshold to show more rock
-        // Range: 0.5 (gentle slopes show vegetation) to 0.25 (aggressive rock exposure)
-        settings.slopeColorThreshold = Lerp(0.5f, 0.25f, intent.mountainSharpness);
-
-        // Slope blend: sharper mountains have crisper transitions
-        settings.slopeColorBlend = Lerp(0.25f, 0.1f, intent.mountainSharpness);
     }
 
     void TerrainIntentMapper::DeriveTectonicUplift(const TerrainIntent &intent, TerrainSettings &settings)

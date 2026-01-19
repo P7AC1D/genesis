@@ -20,6 +20,7 @@ namespace Genesis
         int chunkSize = 128;    // Grid cells per chunk side
         float cellSize = 0.25f; // World units per cell
         int viewDistance = 3;   // Chunks to load in each direction
+        int hydrologyDistance = 1; // Only compute full hydrology within this distance
 
         // World seed
         uint32_t seed = 12345;

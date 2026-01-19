@@ -100,6 +100,19 @@ namespace Genesis
                       float worldOffsetZ);
 
         /**
+         * Generate climate fields with explicit grid dimensions.
+         * Use this when hydrology data is not available.
+         */
+        void Generate(const std::vector<float> &heightmap,
+                      int gridWidth,
+                      int gridDepth,
+                      float seaLevel,
+                      float heightScale,
+                      float cellSize,
+                      float worldOffsetX,
+                      float worldOffsetZ);
+
+        /**
          * Get the climate data.
          */
         const ClimateData &GetData() const { return m_Data; }
@@ -161,6 +174,23 @@ namespace Genesis
          */
         void ComputeRainShadow(const std::vector<float> &heightmap,
                                float cellSize);
+
+        /**
+         * Simplified moisture calculation using only world-coherent noise.
+         * Used for distant chunks to ensure seamless boundaries.
+         */
+        void ComputeSimplifiedMoisture(const std::vector<float> &heightmap,
+                                       float seaLevel,
+                                       float heightScale,
+                                       float cellSize,
+                                       float worldOffsetX,
+                                       float worldOffsetZ);
+
+        /**
+         * Simplified fertility calculation based on temperature and moisture.
+         * Used for distant chunks to ensure seamless boundaries.
+         */
+        void ComputeSimplifiedFertility();
 
         SimplexNoise *m_Noise = nullptr;
         ClimateSettings m_Settings;

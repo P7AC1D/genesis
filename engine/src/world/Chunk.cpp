@@ -1,6 +1,7 @@
 #include "genesis/world/Chunk.h"
 #include "genesis/renderer/VulkanDevice.h"
 #include "genesis/procedural/Water.h"
+#include "genesis/procedural/Noise.h"
 #include "genesis/core/Log.h"
 #include <random>
 #include <cmath>
@@ -34,10 +35,10 @@ namespace Genesis
                worldZ >= origin.z && worldZ < origin.z + chunkWorldSize;
     }
 
-    void Chunk::Generate(const TerrainSettings &settings, uint32_t worldSeed, float seaLevel)
+    void Chunk::Generate(const TerrainSettings &settings, uint32_t worldSeed, float seaLevel, bool computeHydrology)
     {
-        GEN_DEBUG("Chunk::Generate - heightScale: {}, noiseScale: {}, useWarp: {}",
-                  settings.heightScale, settings.noiseScale, settings.useWarp);
+        GEN_DEBUG("Chunk::Generate - heightScale: {}, noiseScale: {}, useWarp: {}, hydrology: {}",
+                  settings.heightScale, settings.noiseScale, settings.useWarp, computeHydrology);
 
         // Configure terrain generator
         TerrainSettings chunkSettings = settings;
@@ -49,7 +50,23 @@ namespace Genesis
 
         glm::vec3 worldPos = GetWorldPosition();
 
-        // Generate terrain mesh
+        // Step 1: Generate heightmap first (needed by all subsequent systems)
+        m_TerrainGenerator.GenerateHeightmapAtOffset(worldPos.x, worldPos.z);
+        const auto &heightmap = m_TerrainGenerator.GetCachedHeightmap();
+
+        // Step 2: Run hydrology pipeline only if requested (expensive for distant chunks)
+        if (computeHydrology)
+        {
+            GenerateHydrology(seaLevel);
+            GenerateClimateAndMaterials(seaLevel);
+        }
+        else
+        {
+            // For distant chunks, generate lightweight climate/biome data without full hydrology
+            GenerateClimateAndBiomes(seaLevel);
+        }
+
+        // Step 3: Build terrain mesh (uses biome-based coloring)
         auto terrainMesh = GenerateTerrainMesh(worldPos.x, worldPos.z, worldSeed);
 
         if (terrainMesh)
@@ -59,14 +76,23 @@ namespace Genesis
 
         // Initialize ocean mask and generate below-sea mask
         m_OceanMask.Initialize(m_Size, m_Size);
-        const auto &heightmap = m_TerrainGenerator.GetCachedHeightmap();
         if (!heightmap.empty())
         {
             m_OceanMask.GenerateBelowSeaMask(heightmap, seaLevel);
         }
 
-        // Generate water plane (will be updated after flood fill in ChunkManager)
-        GenerateWater(seaLevel);
+        // Step 4: Generate water meshes for lakes and rivers only if hydrology computed
+        if (computeHydrology)
+        {
+            GenerateWaterMeshes(seaLevel);
+        }
+
+        // Only generate ocean water plane if there's terrain below sea level
+        // Check if any cells in the ocean mask are marked as below sea level
+        if (m_OceanMask.HasAnyBelowSeaLevel())
+        {
+            GenerateWater(seaLevel);
+        }
 
         // Generate object positions
         GenerateObjects(worldSeed, seaLevel);
@@ -77,7 +103,160 @@ namespace Genesis
     std::shared_ptr<Mesh> Chunk::GenerateTerrainMesh(float offsetX, float offsetZ, [[maybe_unused]] uint32_t worldSeed)
     {
         // Delegate all terrain generation to TerrainGenerator (single source of truth)
-        return m_TerrainGenerator.GenerateAtOffset(offsetX, offsetZ);
+        // Now uses biome classifier data for coloring if available
+        return m_TerrainGenerator.GenerateAtOffset(offsetX, offsetZ, &m_MaterialBlender, &m_BiomeClassifier);
+    }
+
+    void Chunk::GenerateHydrology(float seaLevel)
+    {
+        const auto &heightmap = m_TerrainGenerator.GetCachedHeightmap();
+        if (heightmap.empty())
+        {
+            GEN_WARN("Chunk::GenerateHydrology - No heightmap available");
+            return;
+        }
+
+        int gridWidth = m_Size + 1;
+        int gridDepth = m_Size + 1;
+
+        // Step 1: Compute drainage graph (flow directions and accumulation)
+        m_DrainageGraph.Compute(heightmap, gridWidth, gridDepth, m_CellSize, seaLevel);
+
+        // Step 2: Generate rivers from drainage data
+        m_RiverGenerator.Configure(0.5f, m_CellSize); // Default river strength
+        m_RiverGenerator.Generate(m_DrainageGraph, heightmap, seaLevel);
+
+        // Step 3: Generate lakes from drainage pits
+        m_LakeGenerator.Generate(m_DrainageGraph, heightmap, seaLevel);
+
+        // Step 4: Compute unified hydrology data
+        m_HydrologyGenerator.Compute(m_DrainageGraph, m_RiverGenerator, m_LakeGenerator, heightmap, m_CellSize);
+        m_HydrologyData = m_HydrologyGenerator.GetData();
+
+        GEN_DEBUG("Chunk::GenerateHydrology - Rivers: {}, Lakes: {}",
+                  m_RiverGenerator.GetNetwork().rivers.size(),
+                  m_LakeGenerator.GetNetwork().lakes.size());
+    }
+
+    void Chunk::GenerateClimateAndMaterials(float seaLevel)
+    {
+        const auto &heightmap = m_TerrainGenerator.GetCachedHeightmap();
+        const auto &settings = m_TerrainGenerator.GetSettings();
+
+        if (heightmap.empty())
+        {
+            GEN_WARN("Chunk::GenerateClimateAndMaterials - No heightmap available");
+            return;
+        }
+
+        glm::vec3 worldPos = GetWorldPosition();
+
+        // Initialize climate generator with noise
+        SimplexNoise noise(settings.seed);
+        ClimateSettings climateSettings;
+        m_ClimateGenerator.Initialize(&noise, climateSettings);
+
+        // Grid dimensions (heightmap is (width+1) x (depth+1))
+        int gridWidth = m_Size + 1;
+        int gridDepth = m_Size + 1;
+
+        // Use simplified climate generation for biome classification
+        // This ensures seamless chunk boundaries (no chunk-local rain shadow effects)
+        m_ClimateGenerator.Generate(
+            heightmap,
+            gridWidth,
+            gridDepth,
+            seaLevel,
+            settings.heightScale,
+            m_CellSize,
+            worldPos.x,
+            worldPos.z);
+
+        // Classify biomes based on climate data
+        m_BiomeClassifier.Classify(m_ClimateGenerator.GetData());
+
+        // Compute material weights from climate and hydrology
+        m_MaterialBlender.Compute(
+            heightmap,
+            m_HydrologyData,
+            m_ClimateGenerator.GetData(),
+            seaLevel,
+            settings.heightScale);
+    }
+
+    void Chunk::GenerateClimateAndBiomes(float seaLevel)
+    {
+        // Lightweight version of GenerateClimateAndMaterials for distant chunks
+        // Generates climate and biome data without full hydrology computation
+        const auto &heightmap = m_TerrainGenerator.GetCachedHeightmap();
+        const auto &settings = m_TerrainGenerator.GetSettings();
+
+        if (heightmap.empty())
+        {
+            GEN_WARN("Chunk::GenerateClimateAndBiomes - No heightmap available");
+            return;
+        }
+
+        glm::vec3 worldPos = GetWorldPosition();
+
+        // Initialize climate generator with noise
+        SimplexNoise noise(settings.seed);
+        ClimateSettings climateSettings;
+        m_ClimateGenerator.Initialize(&noise, climateSettings);
+
+        // Grid dimensions (heightmap is (width+1) x (depth+1))
+        int gridWidth = m_Size + 1;
+        int gridDepth = m_Size + 1;
+
+        // Generate climate fields with explicit grid dimensions (no hydrology)
+        m_ClimateGenerator.Generate(
+            heightmap,
+            gridWidth,
+            gridDepth,
+            seaLevel,
+            settings.heightScale,
+            m_CellSize,
+            worldPos.x,
+            worldPos.z);
+
+        // Classify biomes based on climate data
+        m_BiomeClassifier.Classify(m_ClimateGenerator.GetData());
+    }
+
+    void Chunk::GenerateWaterMeshes([[maybe_unused]] float seaLevel)
+    {
+        const auto &heightmap = m_TerrainGenerator.GetCachedHeightmap();
+
+        // Generate lake meshes in local coordinates (chunk transform handles world position)
+        const auto &lakeNetwork = m_LakeGenerator.GetNetwork();
+        if (!lakeNetwork.lakes.empty())
+        {
+            // Use zero offset - meshes should be in local chunk space
+            glm::vec3 localOffset(0.0f);
+            auto lakeMeshes = m_LakeMeshGenerator.Generate(lakeNetwork, heightmap, m_CellSize, localOffset);
+            auto combinedLakeMesh = m_LakeMeshGenerator.CreateCombinedMesh(lakeMeshes);
+            if (combinedLakeMesh && !combinedLakeMesh->GetVertices().empty())
+            {
+                m_LakeMesh = std::make_unique<Mesh>(combinedLakeMesh->GetVertices(), combinedLakeMesh->GetIndices());
+                m_HasLakes = true;
+            }
+        }
+
+        // Generate river meshes in local coordinates (chunk transform handles world position)
+        const auto &riverNetwork = m_RiverGenerator.GetNetwork();
+        if (!riverNetwork.rivers.empty())
+        {
+            // Use zero offset - meshes should be in local chunk space
+            glm::vec3 localOffset(0.0f);
+            auto riverMesh = m_RiverMeshGenerator.GenerateCombinedMesh(riverNetwork, heightmap, m_CellSize, localOffset);
+            if (riverMesh && !riverMesh->GetVertices().empty())
+            {
+                m_RiverMesh = std::make_unique<Mesh>(riverMesh->GetVertices(), riverMesh->GetIndices());
+                m_HasRivers = true;
+            }
+        }
+
+        GEN_DEBUG("Chunk::GenerateWaterMeshes - HasLakes: {}, HasRivers: {}", m_HasLakes, m_HasRivers);
     }
 
     void Chunk::GenerateObjects(uint32_t worldSeed, float seaLevel)
@@ -100,6 +279,10 @@ namespace Genesis
         m_TreePositions.reserve(numSamples / 4);
         m_RockPositions.reserve(numSamples / 6);
 
+        // Normalized height thresholds for object placement
+        constexpr float SHORE_LEVEL = 0.25f; // Below this is beach/shore
+        constexpr float TREELINE = 0.8f;     // Above this is alpine/rock
+
         for (int i = 0; i < numSamples; i++)
         {
             float localX = distPos(rng);
@@ -114,8 +297,8 @@ namespace Genesis
             float normalizedHeight = glm::clamp((height - minHeight) / heightRange, 0.0f, 1.0f);
             float randomValue = distProb(rng);
 
-            // Trees in grass zone
-            if (normalizedHeight > settings.sandLevel && normalizedHeight < settings.rockLevel)
+            // Trees in vegetation zones (between shore and treeline)
+            if (normalizedHeight > SHORE_LEVEL && normalizedHeight < TREELINE)
             {
                 if (randomValue < 0.01f)
                 {
@@ -125,7 +308,7 @@ namespace Genesis
 
             // Rocks everywhere above water
             randomValue = distProb(rng);
-            if (normalizedHeight > settings.waterLevel * 0.5f)
+            if (normalizedHeight > 0.1f)
             {
                 if (randomValue < 0.007f)
                 {
@@ -137,21 +320,88 @@ namespace Genesis
 
     void Chunk::GenerateWater(float seaLevel)
     {
-        float chunkWorldSize = m_Size * m_CellSize;
-
-        auto waterMesh = WaterGenerator::GeneratePlane(
-            chunkWorldSize * 0.5f,
-            chunkWorldSize * 0.5f,
-            chunkWorldSize,
-            chunkWorldSize,
-            8,
-            seaLevel);
-
-        if (waterMesh)
+        // Generate water mesh only for cells that are actually below sea level
+        const auto &heightmap = m_TerrainGenerator.GetCachedHeightmap();
+        if (heightmap.empty())
         {
-            m_WaterMesh = std::make_unique<Mesh>(waterMesh->GetVertices(), waterMesh->GetIndices());
-            m_HasWater = true;
+            m_HasWater = false;
+            return;
         }
+
+        std::vector<Vertex> vertices;
+        std::vector<uint32_t> indices;
+
+        glm::vec3 waterColor(0.1f, 0.4f, 0.6f);
+        int gridWidth = m_Size + 1;
+
+        // Generate a quad for each cell that is below sea level
+        for (int z = 0; z < m_Size; z++)
+        {
+            for (int x = 0; x < m_Size; x++)
+            {
+                // Check if cell center is below sea level
+                size_t idx = static_cast<size_t>(z) * gridWidth + x;
+                float cellHeight = heightmap[idx];
+
+                if (cellHeight >= seaLevel)
+                {
+                    continue;
+                }
+
+                // Cell corners in local space
+                float x0 = x * m_CellSize;
+                float x1 = (x + 1) * m_CellSize;
+                float z0 = z * m_CellSize;
+                float z1 = (z + 1) * m_CellSize;
+
+                // Create quad vertices
+                uint32_t baseIdx = static_cast<uint32_t>(vertices.size());
+
+                Vertex v0, v1, v2, v3;
+                v0.Position = glm::vec3(x0, seaLevel, z0);
+                v0.Normal = glm::vec3(0.0f, 1.0f, 0.0f);
+                v0.Color = waterColor;
+                v0.TexCoord = glm::vec2(0.0f, 0.0f);
+
+                v1.Position = glm::vec3(x1, seaLevel, z0);
+                v1.Normal = glm::vec3(0.0f, 1.0f, 0.0f);
+                v1.Color = waterColor;
+                v1.TexCoord = glm::vec2(1.0f, 0.0f);
+
+                v2.Position = glm::vec3(x1, seaLevel, z1);
+                v2.Normal = glm::vec3(0.0f, 1.0f, 0.0f);
+                v2.Color = waterColor;
+                v2.TexCoord = glm::vec2(1.0f, 1.0f);
+
+                v3.Position = glm::vec3(x0, seaLevel, z1);
+                v3.Normal = glm::vec3(0.0f, 1.0f, 0.0f);
+                v3.Color = waterColor;
+                v3.TexCoord = glm::vec2(0.0f, 1.0f);
+
+                vertices.push_back(v0);
+                vertices.push_back(v1);
+                vertices.push_back(v2);
+                vertices.push_back(v3);
+
+                // Two triangles per quad (CCW winding)
+                indices.push_back(baseIdx + 0);
+                indices.push_back(baseIdx + 3);
+                indices.push_back(baseIdx + 1);
+
+                indices.push_back(baseIdx + 1);
+                indices.push_back(baseIdx + 3);
+                indices.push_back(baseIdx + 2);
+            }
+        }
+
+        if (vertices.empty())
+        {
+            m_HasWater = false;
+            return;
+        }
+
+        m_WaterMesh = std::make_unique<Mesh>(vertices, indices);
+        m_HasWater = true;
     }
 
     void Chunk::RegenerateWater(float seaLevel, bool useOceanMask)
@@ -179,80 +429,81 @@ namespace Genesis
 
     void Chunk::GenerateWaterWithOceanMask(float seaLevel)
     {
-        // Generate water mesh only where ocean mask is true
-        // This creates water only for ocean-connected cells, not inland lakes
+        // Generate water mesh only for cells that are actually below sea level
+        // This creates per-cell water quads, not a full plane
 
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
 
-        glm::vec3 waterColor(0.1f, 0.4f, 0.6f);
-        glm::vec3 lakeColor(0.15f, 0.45f, 0.55f); // Slightly different for lakes
+        glm::vec3 oceanColor(0.1f, 0.4f, 0.6f);
+        int cellCount = 0;
 
-        // Check if there's any ocean in this chunk
-        bool hasOcean = false;
-        for (int z = 0; z < m_Size && !hasOcean; z++)
+        // Generate a quad for each cell that is below sea level (ocean or inland lake)
+        for (int z = 0; z < m_Size; z++)
         {
-            for (int x = 0; x < m_Size && !hasOcean; x++)
+            for (int x = 0; x < m_Size; x++)
             {
-                if (m_OceanMask.IsOcean(x, z))
+                if (!m_OceanMask.IsBelowSeaLevel(x, z))
                 {
-                    hasOcean = true;
+                    continue;
                 }
+
+                // Cell corners in local space
+                float x0 = x * m_CellSize;
+                float x1 = (x + 1) * m_CellSize;
+                float z0 = z * m_CellSize;
+                float z1 = (z + 1) * m_CellSize;
+
+                // Determine color - ocean vs inland lake
+                bool isOcean = m_OceanMask.IsOcean(x, z);
+                glm::vec3 color = isOcean ? oceanColor : glm::vec3(0.15f, 0.45f, 0.55f);
+
+                // Create quad vertices
+                uint32_t baseIdx = static_cast<uint32_t>(vertices.size());
+
+                Vertex v0, v1, v2, v3;
+                v0.Position = glm::vec3(x0, seaLevel, z0);
+                v0.Normal = glm::vec3(0.0f, 1.0f, 0.0f);
+                v0.Color = color;
+                v0.TexCoord = glm::vec2(0.0f, 0.0f);
+
+                v1.Position = glm::vec3(x1, seaLevel, z0);
+                v1.Normal = glm::vec3(0.0f, 1.0f, 0.0f);
+                v1.Color = color;
+                v1.TexCoord = glm::vec2(1.0f, 0.0f);
+
+                v2.Position = glm::vec3(x1, seaLevel, z1);
+                v2.Normal = glm::vec3(0.0f, 1.0f, 0.0f);
+                v2.Color = color;
+                v2.TexCoord = glm::vec2(1.0f, 1.0f);
+
+                v3.Position = glm::vec3(x0, seaLevel, z1);
+                v3.Normal = glm::vec3(0.0f, 1.0f, 0.0f);
+                v3.Color = color;
+                v3.TexCoord = glm::vec2(0.0f, 1.0f);
+
+                vertices.push_back(v0);
+                vertices.push_back(v1);
+                vertices.push_back(v2);
+                vertices.push_back(v3);
+
+                // Two triangles per quad (CCW winding)
+                indices.push_back(baseIdx + 0);
+                indices.push_back(baseIdx + 3);
+                indices.push_back(baseIdx + 1);
+
+                indices.push_back(baseIdx + 1);
+                indices.push_back(baseIdx + 3);
+                indices.push_back(baseIdx + 2);
+
+                cellCount++;
             }
         }
 
-        if (!hasOcean)
+        if (vertices.empty())
         {
-            // No ocean in this chunk, optionally render lakes or skip water entirely
             m_HasWater = false;
             return;
-        }
-
-        // For simplicity, generate a full water plane for chunks with any ocean
-        // A more sophisticated approach would generate only ocean cells
-        float chunkWorldSize = m_Size * m_CellSize;
-        int subdivisions = 8;
-        float halfSize = chunkWorldSize * 0.5f;
-        float cellWidth = chunkWorldSize / subdivisions;
-        float cellDepth = chunkWorldSize / subdivisions;
-
-        // Generate vertices
-        for (int z = 0; z <= subdivisions; z++)
-        {
-            for (int x = 0; x <= subdivisions; x++)
-            {
-                Vertex v;
-                v.Position = glm::vec3(
-                    -halfSize + x * cellWidth + halfSize,
-                    seaLevel,
-                    -halfSize + z * cellDepth + halfSize);
-                v.Normal = glm::vec3(0.0f, 1.0f, 0.0f);
-                v.Color = waterColor;
-                v.TexCoord = glm::vec2(
-                    static_cast<float>(x) / subdivisions,
-                    static_cast<float>(z) / subdivisions);
-                vertices.push_back(v);
-            }
-        }
-
-        // Generate indices (CCW winding order)
-        for (int z = 0; z < subdivisions; z++)
-        {
-            for (int x = 0; x < subdivisions; x++)
-            {
-                int topLeft = z * (subdivisions + 1) + x;
-                int topRight = topLeft + 1;
-                int bottomLeft = (z + 1) * (subdivisions + 1) + x;
-                int bottomRight = bottomLeft + 1;
-
-                indices.push_back(topLeft);
-                indices.push_back(bottomLeft);
-                indices.push_back(topRight);
-
-                indices.push_back(topRight);
-                indices.push_back(bottomLeft);
-                indices.push_back(bottomRight);
-            }
         }
 
         m_WaterMesh = std::make_unique<Mesh>(vertices, indices);
@@ -293,6 +544,20 @@ namespace Genesis
                 m_WaterMesh = std::make_unique<Mesh>(device, cpuWater->GetVertices(), cpuWater->GetIndices());
             }
 
+            // Upload lake mesh
+            if (m_LakeMesh && m_HasLakes)
+            {
+                auto cpuLake = std::move(m_LakeMesh);
+                m_LakeMesh = std::make_unique<Mesh>(device, cpuLake->GetVertices(), cpuLake->GetIndices());
+            }
+
+            // Upload river mesh
+            if (m_RiverMesh && m_HasRivers)
+            {
+                auto cpuRiver = std::move(m_RiverMesh);
+                m_RiverMesh = std::make_unique<Mesh>(device, cpuRiver->GetVertices(), cpuRiver->GetIndices());
+            }
+
             m_State = ChunkState::Loaded;
         }
     }
@@ -310,6 +575,16 @@ namespace Genesis
             {
                 m_WaterMesh->Shutdown();
                 m_WaterMesh.reset();
+            }
+            if (m_LakeMesh)
+            {
+                m_LakeMesh->Shutdown();
+                m_LakeMesh.reset();
+            }
+            if (m_RiverMesh)
+            {
+                m_RiverMesh->Shutdown();
+                m_RiverMesh.reset();
             }
             m_State = ChunkState::Unloaded;
         }
@@ -333,8 +608,27 @@ namespace Genesis
             }
             m_WaterMesh.reset();
         }
+        if (m_LakeMesh)
+        {
+            if (m_State == ChunkState::Loaded)
+            {
+                m_LakeMesh->Shutdown();
+            }
+            m_LakeMesh.reset();
+        }
+        if (m_RiverMesh)
+        {
+            if (m_State == ChunkState::Loaded)
+            {
+                m_RiverMesh->Shutdown();
+            }
+            m_RiverMesh.reset();
+        }
         m_TreePositions.clear();
         m_RockPositions.clear();
+        m_HasLakes = false;
+        m_HasRivers = false;
+        m_HasWater = false;
         m_State = ChunkState::Unloaded;
     }
 

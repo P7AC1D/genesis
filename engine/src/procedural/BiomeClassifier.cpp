@@ -190,4 +190,50 @@ namespace Genesis
         }
     }
 
+    glm::vec3 BiomeClassifier::GetBiomeColor(BiomeType type)
+    {
+        switch (type)
+        {
+        case BiomeType::Polar:
+            return glm::vec3(0.95f, 0.95f, 1.0f); // White-blue (ice/snow)
+        case BiomeType::Tundra:
+            return glm::vec3(0.7f, 0.75f, 0.8f); // Gray-blue (frozen ground)
+        case BiomeType::Boreal:
+            return glm::vec3(0.2f, 0.4f, 0.3f); // Dark green (conifer forest)
+        case BiomeType::Temperate:
+            return glm::vec3(0.3f, 0.6f, 0.3f); // Medium green (deciduous)
+        case BiomeType::Mediterranean:
+            return glm::vec3(0.6f, 0.7f, 0.4f); // Olive (dry scrubland)
+        case BiomeType::Grassland:
+            return glm::vec3(0.7f, 0.8f, 0.4f); // Yellow-green (savanna)
+        case BiomeType::Desert:
+            return glm::vec3(0.9f, 0.8f, 0.5f); // Sandy yellow
+        case BiomeType::Tropical:
+            return glm::vec3(0.2f, 0.7f, 0.3f); // Bright green (lush)
+        case BiomeType::Rainforest:
+            return glm::vec3(0.1f, 0.5f, 0.2f); // Deep green (dense canopy)
+        case BiomeType::Wetland:
+            return glm::vec3(0.3f, 0.5f, 0.5f); // Teal (marsh/swamp)
+        default:
+            return glm::vec3(0.5f, 0.5f, 0.5f); // Gray (unknown)
+        }
+    }
+
+    glm::vec3 BiomeClassifier::GetBlendedBiomeColor(const BiomeWeights &weights)
+    {
+        glm::vec3 blendedColor(0.0f);
+
+        for (size_t i = 0; i < static_cast<size_t>(BiomeType::Count); i++)
+        {
+            float weight = weights.weights[i];
+            if (weight > 0.0f)
+            {
+                BiomeType biomeType = static_cast<BiomeType>(i);
+                blendedColor += GetBiomeColor(biomeType) * weight;
+            }
+        }
+
+        return blendedColor;
+    }
+
 }

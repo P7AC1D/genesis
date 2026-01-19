@@ -29,7 +29,7 @@ namespace Genesis
             m_Settings.terrainSettings.persistence = 0.5f;
             m_Settings.terrainSettings.lacunarity = 2.0f;
             m_Settings.terrainSettings.flatShading = true;
-            m_Settings.terrainSettings.useHeightColors = true;
+            m_Settings.terrainSettings.useBiomeColors = true;
         }
 
         GEN_INFO("ChunkManager initialized (chunk size: {}, view distance: {})",
@@ -143,10 +143,15 @@ namespace Genesis
         auto chunk = std::make_unique<Chunk>(chunkX, chunkZ, m_Settings.chunkSize, m_Settings.cellSize);
         float seaLevel = m_Settings.waterEnabled ? m_Settings.seaLevel : -1000.0f;
 
-        GEN_DEBUG("LoadChunk - using heightScale: {}, noiseScale: {}",
-                  m_Settings.terrainSettings.heightScale, m_Settings.terrainSettings.noiseScale);
+        // Only compute full hydrology for chunks within hydrologyDistance
+        int dx = std::abs(chunkX - m_LastCameraChunk.x);
+        int dz = std::abs(chunkZ - m_LastCameraChunk.y);
+        bool computeHydrology = (dx <= m_Settings.hydrologyDistance && dz <= m_Settings.hydrologyDistance);
 
-        chunk->Generate(m_Settings.terrainSettings, m_Settings.seed, seaLevel);
+        GEN_DEBUG("LoadChunk ({}, {}) - hydrology: {}",
+                  chunkX, chunkZ, computeHydrology);
+
+        chunk->Generate(m_Settings.terrainSettings, m_Settings.seed, seaLevel, computeHydrology);
         chunk->Upload(*m_Device);
 
         m_LoadedChunks[coord] = std::move(chunk);
@@ -193,6 +198,7 @@ namespace Genesis
 
         if (m_Settings.waterEnabled)
         {
+            // Render ocean water planes
             for (const auto &[coord, chunk] : m_LoadedChunks)
             {
                 if (chunk->GetState() == ChunkState::Loaded && chunk->HasWater() && chunk->GetWaterMesh())
@@ -200,6 +206,28 @@ namespace Genesis
                     glm::vec3 worldPos = chunk->GetWorldPosition();
                     glm::mat4 transform = glm::translate(glm::mat4(1.0f), worldPos);
                     renderer.DrawWater(*chunk->GetWaterMesh(), transform);
+                }
+            }
+
+            // Render lake meshes
+            for (const auto &[coord, chunk] : m_LoadedChunks)
+            {
+                if (chunk->GetState() == ChunkState::Loaded && chunk->HasLakes() && chunk->GetLakeMesh())
+                {
+                    glm::vec3 worldPos = chunk->GetWorldPosition();
+                    glm::mat4 transform = glm::translate(glm::mat4(1.0f), worldPos);
+                    renderer.DrawWater(*chunk->GetLakeMesh(), transform);
+                }
+            }
+
+            // Render river meshes
+            for (const auto &[coord, chunk] : m_LoadedChunks)
+            {
+                if (chunk->GetState() == ChunkState::Loaded && chunk->HasRivers() && chunk->GetRiverMesh())
+                {
+                    glm::vec3 worldPos = chunk->GetWorldPosition();
+                    glm::mat4 transform = glm::translate(glm::mat4(1.0f), worldPos);
+                    renderer.DrawWater(*chunk->GetRiverMesh(), transform);
                 }
             }
         }

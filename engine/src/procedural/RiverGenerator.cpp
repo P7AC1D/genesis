@@ -12,10 +12,11 @@ namespace Genesis
 
         // Thresholds scale inversely with riverStrength
         // Higher riverStrength = lower thresholds = more rivers
+        // Increased base thresholds to reduce excessive water
         m_Settings.streamThreshold = static_cast<uint32_t>(
-            100.0f - 80.0f * riverStrength); // 100 -> 20
+            300.0f - 200.0f * riverStrength); // 300 -> 100
         m_Settings.majorRiverThreshold = static_cast<uint32_t>(
-            1000.0f - 800.0f * riverStrength); // 1000 -> 200
+            3000.0f - 2000.0f * riverStrength); // 3000 -> 1000
 
         // River geometry scales with riverStrength
         m_Settings.riverWidthScale = 0.05f + 0.15f * riverStrength; // 0.05 -> 0.2
